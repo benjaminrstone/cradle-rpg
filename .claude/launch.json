@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cradle-duel",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["serve.py", "8123"],
+      "port": 8123
+    },
+    {
+      "name": "fight-animation",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8131", "--directory", "animations/eithan-vs-yerin"],
+      "port": 8131
+    },
+    {
+      "name": "fight-film",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8132", "--directory", "animations/yerin-vs-lindon"],
+      "port": 8132
+    }
+  ]
+}

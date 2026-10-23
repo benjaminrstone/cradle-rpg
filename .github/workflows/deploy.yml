@@ -1,0 +1,79 @@
+name: Deploy
+
+# A push to main that touches the app deploys cradle.ben-stone.xyz (pm2 app "cradle" on the
+# EC2 box shared with shattered-lands and Foundry). Docs-only pushes don't deploy.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'styles.css'
+      - 'src/**'
+      - 'serve.py'
+      - 'ecosystem.config.cjs'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Catch a broken file before it reaches the server.
+      - name: Check the app parses
+        run: |
+          for f in src/*.js; do node --input-type=module --check < "$f" || { echo "::error file=$f::does not parse"; exit 1; }; done
+          python3 -m py_compile serve.py
+
+      - name: Package release
+        run: tar czf release.tar.gz index.html styles.css src serve.py ecosystem.config.cjs
+
+      - name: Upload release to server
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: release.tar.gz
+          target: /tmp/cradle/
+
+      # Unpack into next/, swap it in as current/ (keeping the old one as previous/), reload pm2,
+      # and check the site answers. If it doesn't, put the previous release back.
+      - name: Swap the release in and restart
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            ROOT=/srv/cradle
+            mkdir -p "$ROOT/data"
+            rm -rf "$ROOT/next" && mkdir "$ROOT/next"
+            tar xzf /tmp/cradle/release.tar.gz -C "$ROOT/next"
+            rm -rf "$ROOT/previous"
+            if [ -d "$ROOT/current" ]; then mv "$ROOT/current" "$ROOT/previous"; fi
+            mv "$ROOT/next" "$ROOT/current"
+            pm2 startOrReload "$ROOT/current/ecosystem.config.cjs" --update-env
+            ok=""
+            for i in $(seq 1 15); do
+              if curl -fsS -o /dev/null http://127.0.0.1:3010/; then ok=1; break; fi
+              sleep 1
+            done
+            if [ -z "$ok" ]; then
+              echo "Health check failed; restoring the previous release."
+              pm2 logs cradle --lines 30 --nostream || true
+              if [ -d "$ROOT/previous" ]; then
+                mv "$ROOT/current" "$ROOT/next"
+                mv "$ROOT/previous" "$ROOT/current"
+                pm2 startOrReload "$ROOT/current/ecosystem.config.cjs" --update-env
+              fi
+              exit 1
+            fi
+            pm2 save
+            rm -rf /tmp/cradle

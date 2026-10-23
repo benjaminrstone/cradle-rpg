@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cradle Duel</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Cradle Duel</h1>
+    <div id="clock" class="clock"></div>
+    <div id="range" class="range"></div>
+    <label class="claude-pick">Fighters
+      <select id="pick0"></select> vs <select id="pick1"></select>
+    </label>
+    <label class="claude-pick">Claude plays
+      <select id="claude-side"></select>
+    </label>
+    <button id="restart" class="ghost">Restart</button>
+    <button id="open-builder" class="ghost">Builder</button>
+  </header>
+  <main class="layout">
+    <section id="f0" class="fighter"></section>
+    <section class="center">
+      <div id="field" class="panel field"></div>
+      <div id="queue" class="panel queue"></div>
+      <div id="prompt" class="panel prompt"></div>
+    </section>
+    <section id="f1" class="fighter"></section>
+  </main>
+  <section id="log" class="panel log"></section>
+  <div id="builder" class="builder" hidden></div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
