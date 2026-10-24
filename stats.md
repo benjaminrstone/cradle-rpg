@@ -73,8 +73,8 @@ Fighters are built with points. Every stat starts at the typical value for the s
 
 Body and Spirit steps are fractions of the stage's typical value, so they scale when a fighter advances; Mind steps are flat.
 
-- **Raising costs more the further you go:** the 1st step up costs 1 point, the 2nd 2, the 3rd 3 (a +3 stat costs 6).
-- **Lowering pays back 1 point per step,** down to −3 per stat. Weaknesses are cheap to take and strengths expensive, so one real specialty costs several weaknesses or most of a budget.
+- **Each step up costs 1 point,** with no limit per stat.
+- **Each step down pays back 1 point,** down to −3 per stat.
 - **A named fighter has 6 points to spend,** plus whatever their weaknesses pay back.
 - **Each Path grants its signature stat's first step free:** madra pool for the Hollow King, Precision for the Endless Sword, Toughness for the Dawn Oath, channel cap for Black Flame.
 - **Traits and weapons come out of the same budget,** so a Goldsign or a better weapon competes with stats.

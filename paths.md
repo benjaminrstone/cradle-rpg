@@ -16,7 +16,7 @@ Fire and destruction madra. Black Flame hits harder for its madra than anything 
 | Burning Cloak | Enforcer stance | 6 to raise | 1 | Speed ×1.5 and +5 physical damage. Upkeep 1.5 madra per tick |
 | Void Dragon's Dance | Ruler | Any amount: no channel cap | Madra ÷ 2 | A finisher: a long build-up, then one blast of black fire over a wide area. As a Ruler technique, you keep acting while it builds. Area attack, no roll; hits everything at Close and Mid range. 21 / 43 / 64 damage at 12 / 20 / 30 madra (wind-ups of about 5, 8.5 and 13 ticks). Boosted by fire and destruction in the area: +1 damage for every point of Black Flame madra spent while it winds up |
 
-**Learning the Path:** Dragon's Breath and Burning Cloak are core (free). Void Dragon's Dance costs 2 points.
+**Learning the Path:** Dragon's Breath, Burning Cloak and Void Dragon's Dance are core (free).
 
 **How you win:** Burning Cloak makes you faster than your opponent, so you hit more often, dodge better, and act more often. Dragon's Breath does more damage per madra than any other Striker technique, so a few clean hits end the fight. Void Dragon's Dance is the finisher: build it up, keep it from being interrupted, and feed it with the rest of the Path until it lands.
 
@@ -34,7 +34,7 @@ Sword madra. Sword aura cuts, so it slips past toughness, and the Path's signatu
 | Rippling Sword | Striker | Any, up to channel cap | Madra ÷ 4 | A strike whose edge extends into a wave of sword aura. 10 + madra × efficiency: 18 / 25 / 36. Any range; best at Close or Mid (−1 to hit at Far) |
 | Flowing Sword | Enforcer stance | 4 to raise | 1 | Builds up while held, with no limit: every 5 ticks, +10% Speed and +1 sharpness. Upkeep starts at 1 madra per 2 ticks and rises by 0.1 madra per tick with each build-up, so the pool is what eventually stops it. A hit of twice your interrupt threshold breaks it, like any stance: it drops and all build-up is lost |
 
-**Learning the Path:** Endless Sword and Rippling Sword are core (free). Flowing Sword costs 2 points.
+**Learning the Path:** Endless Sword, Rippling Sword and Flowing Sword are core (free).
 
 **How you win:** sharpness cuts through Toughness, so tough fighters lose their edge. Flowing Sword makes you faster and sharper the longer the fight goes, as long as you aren't hit hard. Endless Sword is an area attack, so even the fastest opponent can't dodge it, and every extra blade on the field adds another hit: armed opponents, sword constructs, and blades left lying around.
 

@@ -1,14 +1,13 @@
 // Character building (stats.md "Building a fighter", techniques.md "Building a technique set").
 // A build starts from a template fighter, then spends points on stat steps, extra Path
 // techniques and technique refinements. Saved builds live in the browser and can fight.
-import { BASE_STATS, FIGHTERS, TRAITS } from './data.js';
+import { FIGHTERS, TRAITS, STAT_STEP, statsFrom } from './data.js';
 import { getPath } from './paths.js';
 
 export const BUDGET = 6;
 
-// One step of each stat. Body and Spirit steps are fractions of the stage's typical value.
-export const STAT_STEP = { health: 10, toughness: 1, speed: 5, pool: 15, cap: 2, spirit: 10, precision: 1, control: 1, perception: 1 };
-export const STAT_LIMIT = 3;            // steps either way per stat
+export { STAT_STEP };
+export const STAT_FLOOR = 3;            // steps down per stat (raising has no limit)
 export const REFINE_UP_LIMIT = 3;       // steps up per technique
 export const REFINE_DOWN_LIMIT = 2;     // steps down per technique
 
@@ -35,7 +34,6 @@ const REFINE_BY_KIND = {
 
 export const refinementsFor = (t) => REFINE_BY_KIND[t.kind] || [];
 export const isCore = (t) => !t.cost;
-const tri = (n) => (n * (n + 1)) / 2;
 const round1 = (x) => Math.round(x * 10) / 10;
 
 export function newBuild(templateId) {
@@ -49,7 +47,7 @@ export function newBuild(templateId) {
     theme: tpl.theme,
     traits: [...tpl.traits],
     weapon: tpl.weapon ? { ...tpl.weapon } : null,
-    steps: Object.fromEntries(Object.keys(STAT_STEP).map((k) => [k, 0])),
+    steps: Object.fromEntries(Object.keys(STAT_STEP).map((k) => [k, (tpl.steps && tpl.steps[k]) || 0])),
     learned: path.techniques.filter((t) => !isCore(t)).map((t) => t.id),
     refine: {},
   };
@@ -60,7 +58,7 @@ export function statCost(build, stat) {
   const n = build.steps[stat] || 0;
   if (n <= 0) return n; // each step down pays back 1
   const free = getPath(build.path).signatureStat === stat ? 1 : 0;
-  return tri(n) - free;
+  return n - free; // every step up costs 1
 }
 
 export function refineSteps(build, techId) {
@@ -71,7 +69,7 @@ export function refineSteps(build, techId) {
 
 export function refineCost(build, techId) {
   const { up, down } = refineSteps(build, techId);
-  return tri(up) - down;
+  return up - down;
 }
 
 export const weaponCost = (w) => Math.ceil(((w && w.damage) || 0) / 2);
@@ -121,8 +119,7 @@ export function refineTechnique(t, r = {}) {
 }
 
 export function toFighter(build) {
-  const stats = { ...BASE_STATS };
-  for (const [k, step] of Object.entries(STAT_STEP)) stats[k] = BASE_STATS[k] + step * (build.steps[k] || 0);
+  const stats = statsFrom(build.steps);
   return {
     id: build.id,
     name: build.name,

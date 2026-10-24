@@ -4,7 +4,7 @@ import { FIGHTERS, STAT_GROUPS, TRAITS, WEAPONS } from './data.js';
 import { allPaths, getPath } from './paths.js';
 import { openPathEditor } from './patheditor.js';
 import {
-  BUDGET, STAT_STEP, STAT_LIMIT, REFINEMENTS, REFINE_UP_LIMIT, REFINE_DOWN_LIMIT,
+  BUDGET, STAT_STEP, STAT_FLOOR, REFINEMENTS, REFINE_UP_LIMIT, REFINE_DOWN_LIMIT,
   newBuild, costs, statCost, refineCost, refineSteps, refinementsFor, isCore, weaponCost, traitCost,
   loadBuilds, saveBuilds, toFighter,
 } from './builds.js';
@@ -51,9 +51,9 @@ function render() {
         <span>${label}${sig ? ' <span class="tag">Path: first step free</span>' : ''}</span>
         <span class="b-val">${fighter.stats[k]}</span>
         <span class="b-step">
-          <button data-b-stat="${k}" data-d="-1" ${n <= -STAT_LIMIT ? 'disabled' : ''}>−</button>
+          <button data-b-stat="${k}" data-d="-1" ${n <= -STAT_FLOOR ? 'disabled' : ''}>−</button>
           <b>${fmtStep(n)}</b>
-          <button data-b-stat="${k}" data-d="1" ${n >= STAT_LIMIT ? 'disabled' : ''}>+</button>
+          <button data-b-stat="${k}" data-d="1">+</button>
         </span>
         <span class="b-cost ${statCost(draft, k) < 0 ? 'refund' : ''}">${n ? `${statCost(draft, k)} pt` : ''}</span>
         <span class="muted small">${STAT_STEP[k]} per step</span>
@@ -131,10 +131,10 @@ function render() {
           </div>
           <div class="b-cols">
             <div><div class="section-label">Stats</div>${statRows}
-              <div class="muted small b-note">Raising costs 1, 2, 3 points for the 1st, 2nd, 3rd step; each step down pays back 1.</div>
+              <div class="muted small b-note">Each step up costs 1 point; each step down pays back 1, down to −3 per stat.</div>
               ${gear}</div>
             <div><div class="section-label">Techniques</div>${techRows}
-              <div class="muted small b-note">Refinements cost 1, 2, 3 for the 1st, 2nd, 3rd step up on a technique (at most ${REFINE_UP_LIMIT}); each step down pays back 1 (at most ${REFINE_DOWN_LIMIT}).</div></div>
+              <div class="muted small b-note">Refinements cost 1 point per step up (at most ${REFINE_UP_LIMIT} per technique); each step down pays back 1 (at most ${REFINE_DOWN_LIMIT}).</div></div>
           </div>
           <div class="b-actions">
             <button data-b-save ${c.left < 0 ? 'disabled' : ''}>${saved.some((b) => b.id === draft.id) ? 'Save changes' : 'Save build'}</button>
@@ -158,7 +158,7 @@ document.addEventListener('click', (e) => {
   if (stat) {
     change(() => {
       const k = stat.dataset.bStat;
-      draft.steps[k] = Math.max(-STAT_LIMIT, Math.min(STAT_LIMIT, (draft.steps[k] || 0) + Number(stat.dataset.d)));
+      draft.steps[k] = Math.max(-STAT_FLOOR, (draft.steps[k] || 0) + Number(stat.dataset.d));
     });
     return;
   }

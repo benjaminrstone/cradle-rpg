@@ -56,9 +56,9 @@ Everyone can strike, dodge, block, move, and wait. The rest come from a fighter'
 
 A fighter's techniques come out of the same point budget as their stats (see stats.md).
 
-- **Each Path's core techniques are free.** Its other techniques cost 1 point for a utility and 2 for a major technique; paths.md lists which is which.
+- **Each Path has three core techniques, and they're free.** Its other techniques cost 1 point for a utility and 2 for a major technique; paths.md lists which is which.
 - **A general library** holds techniques any Path can learn, priced the same way.
-- **Refinements** tune one technique a step at a time. Raising costs 1 point for the first step, 2 for the second and 3 for the third, at most 3 steps per technique. A step down refunds 1 point, at most 2 per technique.
+- **Refinements** tune one technique a step at a time. Each step up costs 1 point, at most 3 per technique; each step down refunds 1 point, at most 2 per technique.
 
 | Refinement | Step up | Step down |
 | --- | --- | --- |

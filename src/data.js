@@ -14,6 +14,16 @@ export const BASE_STATS = {
   precision: 5, control: 5, perception: 5,
 };
 
+// One point-buy step of each stat (stats.md "Building a fighter").
+export const STAT_STEP = { health: 10, toughness: 1, speed: 5, pool: 15, cap: 2, spirit: 10, precision: 1, control: 1, perception: 1 };
+
+// A fighter's stats from their point-buy steps.
+export function statsFrom(steps = {}) {
+  const stats = { ...BASE_STATS };
+  for (const [k, step] of Object.entries(STAT_STEP)) stats[k] = BASE_STATS[k] + step * (steps[k] || 0);
+  return stats;
+}
+
 export const STAT_GROUPS = [
   ['Body', [['health', 'Health'], ['toughness', 'Toughness'], ['speed', 'Speed']]],
   ['Spirit', [['pool', 'Madra pool'], ['cap', 'Channel cap'], ['spirit', 'Spirit']]],
@@ -40,7 +50,7 @@ export const PATHS = {
         desc: 'Speed ×1.5 and +5 physical damage. Upkeep 1.5 madra per tick.',
       },
       {
-        id: 'voidDragonsDance', cost: 2, name: "Void Dragon's Dance", kind: 'attack', type: 'Ruler',
+        id: 'voidDragonsDance', name: "Void Dragon's Dance", kind: 'attack', type: 'Ruler',
         divisor: 2, toHit: 0, ranges: [0, 1], area: true, boostPerMadra: 1, ruler: true,
         desc: 'Finisher: a long build-up, then a wide blast. Ruler: no channel cap, and you act again soon while it builds. Area attack, no roll; hits Close and Mid. +1 damage per Black Flame madra you spend while it winds up.',
       },
@@ -65,7 +75,7 @@ export const PATHS = {
         desc: 'A strike whose edge extends into a wave of sword aura. Any range; best at Close or Mid (−1 to hit at Far).',
       },
       {
-        id: 'flowingSword', cost: 2, name: 'Flowing Sword', kind: 'stance', type: 'Enforcer stance',
+        id: 'flowingSword', name: 'Flowing Sword', kind: 'stance', type: 'Enforcer stance',
         raiseCost: 4, upkeep: 0.5, buildUp: { every: 5, speed: 0.1, sharpness: 1, upkeep: 0.1 },
         desc: 'Every 5 ticks held: +10% Speed, +1 sharpness, +0.1 upkeep per tick. Like every stance, a hit of twice your interrupt threshold breaks it.',
       },
@@ -167,21 +177,32 @@ export const WEAPONS = [
   { name: 'hammer', blade: false, damage: 4 },
 ];
 
-export const FIGHTERS = [
+export const FIGHTERS_RAW = [
   {
     id: 'lindon', name: 'Lindon', path: 'blackFlame', stage: 'Lowgold', theme: 'flame',
-    stats: { ...BASE_STATS }, traits: [], weapon: null,
+    // Black Flame and a Bloodforged Iron body; refined control, still learning to fight.
+    steps: { pool: 3, control: 2, perception: 1, toughness: 2, precision: -1, speed: -1 },
+    traits: [], weapon: null,
   },
   {
     id: 'yerin', name: 'Yerin', path: 'endlessSword', stage: 'Lowgold', theme: 'sword',
-    stats: { ...BASE_STATS }, traits: ['swordArms'], weapon: { name: 'sword', blade: true, damage: 0 },
+    // The fastest and sharpest; fights with her blades rather than finesse.
+    steps: { precision: 4, speed: 1, perception: 1, toughness: 1, control: -1, pool: -1, spirit: -1 },
+    traits: ['swordArms'], weapon: { name: 'sword', blade: true, damage: 0 },
   },
   {
     id: 'eithan', name: 'Eithan', path: 'hollowKing', stage: 'Lowgold', theme: 'pure',
-    stats: { ...BASE_STATS }, traits: [], weapon: { name: 'scissors', blade: true, damage: 0 },
+    // Sees everything and moves well; fragile, with little raw power.
+    steps: { perception: 3, control: 1, pool: 5, speed: 1, cap: -1, toughness: -3, health: -2 },
+    traits: [], weapon: { name: 'scissors', blade: true, damage: 0 },
   },
   {
     id: 'ziel', name: 'Ziel', path: 'dawnOath', stage: 'Lowgold', theme: 'force',
-    stats: { ...BASE_STATS }, traits: [], weapon: { name: 'hammer', blade: false, damage: 4 },
+    // Hard to hurt; slow, with a damaged spirit.
+    steps: { toughness: 3, health: 3, control: -1, speed: -1, spirit: -1, pool: -1 },
+    traits: [], weapon: { name: 'hammer', blade: false, damage: 4 },
   },
 ];
+
+// Canon fighters, with their stats worked out from their steps.
+export const FIGHTERS = FIGHTERS_RAW.map((f) => ({ ...f, stats: statsFrom(f.steps) }));
