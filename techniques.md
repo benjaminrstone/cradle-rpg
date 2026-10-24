@@ -13,6 +13,7 @@ Numbers are for a typical fighter in units of their own stage (see stats.md): He
 - **Several wind-ups at once:** a fighter can have more than one technique winding up. A hit over their threshold breaks all of them.
 - **Stances break too,** but take twice the threshold. A hit that big drops every stance you hold.
 - **To-hit:** fast, precise techniques get +1 or +2. Heavy, slow ones get −1.
+- **Some techniques cost extra madra per point of power** (Endless Sword costs 1.5). Their damage and wind-up follow the power; the channel cap limits the madra actually spent.
 - **Best range:** each attack has a best range, and takes −1 to hit for each range band past it.
 - **Range counts when an attack lands.** You can start any attack at any range, including one that will reach only because a move finishes first. One that won't reach is shown with a warning and is wasted if the range doesn't change.
 - **Area attacks don't roll** and deal 0.75× damage for it. They hit everything in range; the defender can block, dodge to cut the damage, or be out of range when they land.

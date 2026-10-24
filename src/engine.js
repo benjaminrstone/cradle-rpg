@@ -210,9 +210,11 @@ export class Game {
 
   // Most actions are limited by channel cap; Ruler techniques draw on aura over their long
   // build-up and are limited only by the madra you have.
+  // The most madra-power a technique can be used at. A technique with costMult spends that many
+  // madra per point of power, and what it spends is what the channel cap limits.
   maxMadra(f, t = null) {
     const limit = t && t.ruler ? f.madra : Math.min(f.stats.cap, f.madra);
-    return Math.max(0, Math.floor(limit));
+    return Math.max(0, Math.floor(limit / ((t && t.costMult) || 1)));
   }
 
   // ---------- attacks ----------
@@ -550,7 +552,7 @@ export class Game {
     const nominal = R.nominalWindup(madra, t.divisor);
     const w = this.twind(t, nominal, f.stats.control);
     const next = (t.ruler ? 0 : w) + R.TIMING.techRecovery;
-    const timing = `Wind-up ${fmt(w)} (lands t=${fmt(this.time + w)}) · next turn in ${fmt(next)}${t.ruler ? ' (Ruler: act while it builds)' : ''}`;
+    const timing = `${t.costMult ? `Costs ${fmt(madra * t.costMult)} madra · ` : ''}Wind-up ${fmt(w)} (lands t=${fmt(this.time + w)}) · next turn in ${fmt(next)}${t.ruler ? ' (Ruler: act while it builds)' : ''}`;
 
     if (t.kind === 'forge') {
       const sp = this.starProfile(f, madra);
@@ -717,7 +719,7 @@ export class Game {
 
     const step = t.madraStep || 1;
     const madra = Math.min(Math.max(t.minMadra || 1, Math.round(amount / step) * step), this.maxMadra(f, t));
-    spendM(madra);
+    spendM(madra * (t.costMult || 1));
     const w = this.twind(t, R.nominalWindup(madra, t.divisor), f.stats.control);
     if (t.kind === 'forge') {
       nextTurn(this.time + STAR.forgeRecovery);
@@ -939,7 +941,7 @@ export class Game {
       } else {
         const step = t.madraStep || 1;
         const madra = Math.min(Math.max(t.minMadra || 1, Math.round(amount / step) * step), Math.floor(this.maxMadra(f, t) / step) * step);
-        this.spend(f, madra, burn);
+        this.spend(f, madra * (t.costMult || 1), burn);
         const w = this.twind(t, R.nominalWindup(madra, t.divisor), f.stats.control);
         if (t.kind === 'forge') {
           this.startWindup(f, w, { kind: 'forged', id: t.id, madra }, madra, { label: `Crown star (${madra})` });
@@ -950,7 +952,7 @@ export class Game {
             this.startForge(f, t, w, madra);
           } else {
             const prof = { ...this.attackProfile(f, key, madra), target };
-            this.startWindup(f, w, { kind: 'attack', profile: prof }, madra, { boostPerMadra: t.boostPerMadra || 0 });
+            this.startWindup(f, w, { kind: 'attack', profile: prof }, madra * (t.costMult || 1), { boostPerMadra: t.boostPerMadra || 0 });
           }
           f.nextTurn = this.time + (t.ruler || t.kind === 'construct' ? 0 : w) + R.TIMING.techRecovery;
           this.addLog(t.kind === 'construct'

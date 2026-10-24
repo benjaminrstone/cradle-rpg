@@ -66,8 +66,8 @@ export const PATHS = {
     techniques: [
       {
         id: 'endlessSword', name: 'Endless Sword', kind: 'attack', type: 'Striker / Ruler',
-        divisor: 3, toHit: 0, ranges: [0, 1], area: true, bladeHits: true,
-        desc: 'Area attack, no roll: slashes everything at close and mid range, constructs included. One extra hit per other blade close to the target.',
+        divisor: 6, costMult: 1.5, toHit: 0, ranges: [0, 1], area: true, bladeHits: true,
+        desc: 'A fast area attack, no roll: slashes everything at close and mid range, constructs included. One extra hit per other blade close to the target. Wind-up madra ÷ 6, but it costs 1.5 madra per point of power.',
       },
       {
         id: 'ripplingSword', name: 'Rippling Sword', kind: 'attack', type: 'Striker',

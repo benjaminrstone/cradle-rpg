@@ -30,7 +30,7 @@ Sword madra. Sword aura cuts, so it slips past toughness, and the Path's signatu
 
 | Technique | Type | Madra | Wind-up | Effect |
 | --- | --- | --- | --- | --- |
-| Endless Sword | Striker / Ruler | Any, up to channel cap | Madra ÷ 3 | Sword aura slashes everything within close and mid range, including constructs. 6 / 11 / 19 damage to each target. Area attack: no roll. Each target is hit once more for every other blade close to it: an opponent's weapon, a Forged sword, a blade on the ground. Your own weapon doesn't count; it's what makes the others resonate |
+| Endless Sword | Striker / Ruler | 1.5 per point of power; what's spent fits the channel cap (power 10 for 15 madra at a typical cap) | Power ÷ 6 | Fast: sword aura slashes everything within close and mid range, including constructs. 6 / 11 damage to each target at power 6 / 10. Area attack: no roll. Each target is hit once more for every other blade close to it: an opponent's weapon, a Forged sword, a blade on the ground. Your own weapon doesn't count; it's what makes the others resonate |
 | Rippling Sword | Striker | Any, up to channel cap | Madra ÷ 4 | A strike whose edge extends into a wave of sword aura. 10 + madra × efficiency: 18 / 25 / 36. Any range; best at Close or Mid (−1 to hit at Far) |
 | Flowing Sword | Enforcer stance | 4 to raise | 1 | Builds up while held, with no limit: every 5 ticks, +10% Speed and +1 sharpness. Upkeep starts at 1 madra per 2 ticks and rises by 0.1 madra per tick with each build-up, so the pool is what eventually stops it. A hit of twice your interrupt threshold breaks it, like any stance: it drops and all build-up is lost |
 
