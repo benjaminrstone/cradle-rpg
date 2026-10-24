@@ -389,3 +389,8 @@ details[data-stance] .stance-desc { color: var(--muted); margin: 4px 0 2px 14px;
 .p-add { display: flex; gap: 8px; margin-top: 10px; }
 .p-swatch { padding: 3px 10px; border: 1px solid; border-radius: 999px; font-size: 12px; font-weight: 650; }
 .p-knob input[type=color] { width: 44px; height: 26px; padding: 0 2px; background: none; border: 1px solid var(--line); }
+
+/* Hovering a wind-up shows what it would do if it landed now. */
+.pending.has-detail { cursor: help; }
+.pending .pending-detail { display: none; margin-top: 4px; font-size: 12px; color: var(--muted); }
+.pending.has-detail:hover .pending-detail { display: block; }

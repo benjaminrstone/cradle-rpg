@@ -1151,6 +1151,50 @@ export class Game {
     }
   }
 
+  // What a queued event would do to its target if it landed now: damage after reduction,
+  // chance to hit, and whether it breaks wind-ups or stances. Shown when hovering a wind-up.
+  describeEvent(e) {
+    if (!e) return '';
+    const f = this.fighters[e.actor];
+    const o = this.opponent(f);
+    const a = e.action;
+    const herThreshold = (res) => (res.breaksStances ? ` · breaks ${o.name}'s stances` : res.interrupts ? ` · breaks ${o.name}'s wind-ups` : '');
+    if (a.kind === 'forged') {
+      const res = this.hitResult(f, o, this.starProfile(f, a.madra));
+      return `When dropped: ${res.dmg} spirit damage to ${o.name} · ${pct(this.hitChance(f, o, this.starProfile(f, a.madra)))} to hit${herThreshold(res)}`;
+    }
+    if (a.kind === 'stance') return `Raises ${this.tech(f, a.id).name}`;
+    if (a.kind === 'piece') return `Adds ${fmt(a.madra * 2 * ((this.tech(f, a.id) || {}).sizeMult || 1))} HP to ${f.name}'s barrier`;
+    if (a.kind === 'move') return '';
+    const prof = a.profile;
+    if (!prof) return '';
+    const landsIn = prof.target ? true : prof.ranges.includes(this.distanceAt(e.time));
+    const out = landsIn ? '' : ' · out of range when it lands';
+    if (a.kind === 'pulse' || prof.effect === 'pulse') {
+      const names = this.pulseTargets(o, prof.madra, prof.ranges).map((x) => x.name);
+      return `Cancels ${names.length ? names.join(', ') : `nothing of ${o.name}'s right now`} unless ${o.name} blocks${out}`;
+    }
+    if (prof.effect === 'disrupt') return `${pct(this.hitChance(f, o, prof))} to hit · breaks ${o.name}'s wind-ups and stances${out}`;
+    const w = f.windups.find((x) => x.eventId === e.id);
+    const boosted = w && w.boost ? { ...prof, damage: prof.damage + w.boost } : prof;
+    if (boosted.target) {
+      const c = o.constructs.find((x) => x.id === boosted.target);
+      return c ? `${this.constructDamage(boosted)} damage to ${o.name}'s ${c.name} (${fmt(c.hp)} HP) · ${pct(this.constructHitChance(f, boosted, c))} to hit` : '';
+    }
+    const hits = this.hitsAgainst(f, o, boosted);
+    const each = this.hitProfiles(boosted, hits).map((hp) => this.hitResult(f, o, hp));
+    const track = each[0].track === 'spirit' ? ' spirit' : '';
+    const dmg = boosted.hitDamages || hits > 1 ? `${each.map((r) => r.dmg).join(' + ')}${track} damage` : `${each[0].dmg}${track} damage`;
+    const roll = boosted.area ? 'area attack, no roll' : `${pct(this.hitChance(f, o, boosted))} to hit${hits > 1 ? ' each' : ''}`;
+    const breaks = each.some((r) => r.breaksStances) ? ` · breaks ${o.name}'s stances` : each.some((r) => r.interrupts) ? ` · breaks ${o.name}'s wind-ups` : '';
+    return `${dmg} to ${o.name} after reduction · ${roll}${breaks}${out}`;
+  }
+
+  // The same, for one of a fighter's wind-ups.
+  describeWindup(w) {
+    return this.describeEvent(this.events.find((e) => e.id === w.eventId));
+  }
+
   // The attack a wind-up will deliver, if it is one.
   windupProfile(w) {
     const ev = this.events.find((e) => e.id === w.eventId);
@@ -1393,7 +1437,7 @@ export class Game {
         : k === 'forged' ? `Crown star (${e.action.madra}) forms`
         : `${e.action.profile.name} lands`;
       const type = k === 'move' ? 'move' : k === 'stance' ? 'stance' : k === 'piece' || k === 'forged' ? 'construct' : 'attack';
-      items.push({ key: `ev:${e.id}`, time: e.time, label: `${f.name}: ${label}`, who: e.actor, kind: 'resolve', type });
+      items.push({ key: `ev:${e.id}`, time: e.time, label: `${f.name}: ${label}`, detail: this.describeEvent(e), who: e.actor, kind: 'resolve', type });
     }
     for (const f of this.fighters) {
       for (const def of this.activeStances(f)) {

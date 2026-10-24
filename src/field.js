@@ -98,7 +98,8 @@ export function renderField(game) {
       orb.style.opacity = String(0.45 + 0.55 * p);
       orb.style.setProperty('--p', p);
       orb.querySelector('span').textContent = w.label;
-      orb.title = `${w.label}: lands t=${fmt(w.end)}`;
+      const detail = game.describeWindup(w);
+      orb.title = `${w.label}: lands t=${fmt(w.end)}${detail ? `\n${detail}` : ''}`;
     });
 
   });

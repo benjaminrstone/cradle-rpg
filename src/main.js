@@ -124,8 +124,12 @@ function renderFighter(f, ghost = null) {
 
   const constructs = f.constructs.map((c) => `<li><b>${c.name}</b> — ${fmt(c.hp)} / ${c.maxHp} HP${c.range != null ? ` · ${RANGES[c.range]}` : ''}</li>`).join('');
 
-  const pending = f.windups.map((w) =>
-    `<div class="pending">Winding up <b>${w.label}</b>${w.madra ? ` (${w.madra} madra)` : ''}${w.boost ? ` · boosted +${fmt(w.boost)}` : ''} · lands t=${fmt(w.end)}</div>`).join('')
+  // Hovering a wind-up shows what it would do to its target if it landed now.
+  const pending = f.windups.map((w) => {
+    const detail = game.describeWindup(w);
+    return `<div class="pending${detail ? ' has-detail' : ''}">Winding up <b>${w.label}</b>${w.madra ? ` (${w.madra} madra)` : ''}${w.boost ? ` · boosted +${fmt(w.boost)}` : ''} · lands t=${fmt(w.end)}`
+      + `${detail ? `<div class="pending-detail">${detail}</div>` : ''}</div>`;
+  }).join('')
     + (f.moving ? `<div class="pending">Moving ${f.moving.dir < 0 ? 'in' : 'away'} · arrives t=${fmt(f.moving.end)}</div>` : '');
 
   // Techniques this fighter has used so far, expandable to their full description.
@@ -456,7 +460,7 @@ function updateTrack(track, items, horizon) {
     el.style.setProperty('--offset', i.time - game.time);
     el.dataset.qi = n;
     el.dataset.time = i.time;
-    el.title = `t=${fmt(i.time)} ${i.label}`;
+    el.title = `t=${fmt(i.time)} ${i.label}${i.detail ? `\n${i.detail}` : ''}`;
   });
   for (const el of track.querySelectorAll('.marker:not(.leaving)')) {
     if (seen.has(el.dataset.key)) continue;
