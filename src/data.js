@@ -46,8 +46,8 @@ export const PATHS = {
       },
       {
         id: 'burningCloak', name: 'Burning Cloak', kind: 'stance', type: 'Enforcer stance',
-        raiseCost: 6, upkeep: 1.5, speedMult: 1.5, physBonus: 5,
-        desc: 'Speed ×1.5 and +5 physical damage. Upkeep 1.5 madra per tick.',
+        raiseCost: 6, upkeep: 5, speedMult: 1.5, physBonus: 5,
+        desc: 'Speed ×1.5 and +5 physical damage. Upkeep 5 madra per tick.',
       },
       {
         id: 'voidDragonsDance', name: "Void Dragon's Dance", kind: 'attack', type: 'Ruler',

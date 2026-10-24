@@ -13,7 +13,7 @@ Fire and destruction madra. Black Flame hits harder for its madra than anything 
 | Technique | Type | Madra | Wind-up | Effect |
 | --- | --- | --- | --- | --- |
 | Dragon's Breath | Striker | Any, up to channel cap | Madra ÷ 4 | A beam of black fire. 11 / 20 / 33 damage. +1 to hit. Any range; best at Mid |
-| Burning Cloak | Enforcer stance | 6 to raise | 1 | Speed ×1.5 and +5 physical damage. Upkeep 1.5 madra per tick |
+| Burning Cloak | Enforcer stance | 6 to raise | 1 | Speed ×1.5 and +5 physical damage. Upkeep 5 madra per tick |
 | Void Dragon's Dance | Ruler | Any amount: no channel cap | Madra ÷ 2 | A finisher: a long build-up, then one blast of black fire over a wide area. As a Ruler technique, you keep acting while it builds. Area attack, no roll; hits everything at Close and Mid range. 21 / 43 / 64 damage at 12 / 20 / 30 madra (wind-ups of about 5, 8.5 and 13 ticks). Boosted by fire and destruction in the area: +1 damage for every point of Black Flame madra spent while it winds up |
 
 **Learning the Path:** Dragon's Breath, Burning Cloak and Void Dragon's Dance are core (free).
