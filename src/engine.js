@@ -26,6 +26,7 @@ export class Game {
     this.result = null;
     this.decision = 0; // counts every new decision point, so outside moves can't be applied twice
     this.drawOffers = [false, false]; // the fight ends in a draw when both fighters are offering one
+    this.history = [];                // turns taken and events resolved, for the whole-fight queue view
     this.fighters = defs.map((d, i) => ({
       ...d,
       stats: { ...d.stats },
@@ -58,6 +59,15 @@ export class Game {
   static restore(state, defs, rng = Math.random) {
     const g = Object.create(Game.prototype);
     Object.assign(g, state, { rng });
+    // Fights saved before history was kept: rebuild an approximate one from the log.
+    if (!g.history) {
+      const typeOf = (t) => (/winds up|begins|starts moving|to move|waits|drops /.test(t) ? 'turn'
+        : / arrives/.test(t) ? 'move' : / is up\./.test(t) ? 'stance'
+          : /gains a .*star|barrier builds/.test(t) ? 'construct' : /hits |misses|washes over|lands/.test(t) ? 'attack' : null);
+      g.history = g.log.map((l, i) => ({ l, i, type: l.who != null ? typeOf(l.text) : null }))
+        .filter((x) => x.type)
+        .map(({ l, i, type }) => ({ key: `log:${i}`, time: l.time, label: l.text, who: l.who, kind: type === 'turn' ? 'turn' : 'resolve', type }));
+    }
     g.fighters = state.fighters.map((f) => {
       const def = defs.find((d) => d.id === f.id);
       const out = def ? { ...f, ...def, stats: { ...def.stats } } : f;
@@ -869,6 +879,9 @@ export class Game {
       this.addLog(`${f.name} drops ${this.tech(f, id).name}.`, '', f.index);
       return; // free action: still their turn
     }
+    const what = key === 'strike' ? 'strikes' : key === 'moveIn' ? 'moves in' : key === 'moveOut' ? 'moves away'
+      : key === 'wait' ? 'waits' : (this.tech(f, key) || {}).label || (this.tech(f, key) || {}).name || key;
+    this.history.push({ key: `turn:${f.index}:${Math.round(f.nextTurn * 1000)}`, time: this.time, label: `${f.name}: ${what}`, who: f.index, kind: 'turn', type: 'turn' });
 
     if (!['strike', 'moveIn', 'moveOut', 'wait'].includes(key)) {
       const id = key.split(':')[0];
@@ -1279,6 +1292,8 @@ export class Game {
   }
 
   processEvent(ev) {
+    const { detail, ...item } = this.eventItem(ev);
+    this.history.push(item);
     const f = this.fighters[ev.actor];
     const o = this.opponent(f);
     const a = ev.action;
@@ -1421,6 +1436,19 @@ export class Game {
   }
 
   // ---------- queue view ----------
+  // A queued event as a queue item (the same key before and after it resolves).
+  eventItem(e) {
+    const f = this.fighters[e.actor];
+    const k = e.action.kind;
+    const label = k === 'move' ? `finishes moving ${e.action.dir < 0 ? 'in' : 'away'}`
+      : k === 'stance' ? `${(this.tech(f, e.action.id) || {}).name} is up`
+      : k === 'piece' ? `barrier piece ${e.action.n}/${e.action.of} forms`
+      : k === 'forged' ? `Crown star (${e.action.madra}) forms`
+      : `${e.action.profile.name} lands`;
+    const type = k === 'move' ? 'move' : k === 'stance' ? 'stance' : k === 'piece' || k === 'forged' ? 'construct' : 'attack';
+    return { key: `ev:${e.id}`, time: e.time, label: `${f.name}: ${label}`, detail: this.describeEvent(e), who: e.actor, kind: 'resolve', type };
+  }
+
   upcoming() {
     const items = [];
     for (const f of this.fighters) {
@@ -1428,17 +1456,7 @@ export class Game {
       // Keys stay the same while an item is waiting, so the timeline can animate it between updates.
       items.push({ key: `turn:${f.index}:${Math.round(f.nextTurn * 1000)}`, time: f.nextTurn, label: acting ? `${f.name} acts now` : `${f.name}'s next turn`, who: f.index, kind: 'turn', type: 'turn' });
     }
-    for (const e of this.events) {
-      const f = this.fighters[e.actor];
-      const k = e.action.kind;
-      const label = k === 'move' ? `finishes moving ${e.action.dir < 0 ? 'in' : 'away'}`
-        : k === 'stance' ? `${this.tech(f, e.action.id).name} is up`
-        : k === 'piece' ? `barrier piece ${e.action.n}/${e.action.of} forms`
-        : k === 'forged' ? `Crown star (${e.action.madra}) forms`
-        : `${e.action.profile.name} lands`;
-      const type = k === 'move' ? 'move' : k === 'stance' ? 'stance' : k === 'piece' || k === 'forged' ? 'construct' : 'attack';
-      items.push({ key: `ev:${e.id}`, time: e.time, label: `${f.name}: ${label}`, detail: this.describeEvent(e), who: e.actor, kind: 'resolve', type });
-    }
+    for (const e of this.events) items.push(this.eventItem(e));
     for (const f of this.fighters) {
       for (const def of this.activeStances(f)) {
         const t = this.nextBuildUp(f, def);

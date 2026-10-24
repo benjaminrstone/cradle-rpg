@@ -7,7 +7,7 @@ import { renderField } from './field.js';
 import { initClaude, claudeToAct, waitingPanel, syncClaude, claudeSide, syncFetch } from './claude.js';
 
 let game;
-const ui = { amount: {}, target: {}, block: 0, hover: null, picks: loadPicks(), openStances: new Set() };
+const ui = { amount: {}, target: {}, block: 0, hover: null, picks: loadPicks(), openStances: new Set(), queueAll: loadQueueMode() };
 const $ = (id) => document.getElementById(id);
 
 // ---------- fighter picker ----------
@@ -389,8 +389,14 @@ watchCodeVersion();
 // List icons match the marker shapes on the track.
 const QUEUE_ICONS = { turn: '▮', attack: '▼', move: '➜', stance: '◆', construct: '★', buildup: '▲' };
 
+// The queue shows what's ahead, or the whole fight: everything that happened plus what's scheduled.
+function loadQueueMode() {
+  try { return localStorage.getItem('queueMode') === 'all'; } catch { return false; }
+}
+
 function renderQueue(ghost = null) {
   let items = game.upcoming();
+  const whole = ui.queueAll;
   if (ghost) {
     // The previewed choice replaces the acting fighter's "acts now" entry; a dodge or block shifts the defender's next turn.
     const replaced = ghost.replacesTurn ?? ghost.shiftTurn;
@@ -399,32 +405,53 @@ function renderQueue(ghost = null) {
     }
     items = items.concat(ghost.queue).sort((a, b) => a.time - b.time);
   }
-  // The timeline spans what's queued (at least 6 ticks), so near events don't bunch up.
-  const horizon = Math.max(6, ...items.map((i) => Math.ceil(i.time - game.time + 1)));
+  if (whole) items = [...(game.history || []).map((h) => ({ ...h, past: true })), ...items];
+  // Ahead: the timeline spans what's queued (at least 6 ticks), so near events don't bunch up.
+  // Whole fight: it spans t=0 to the last scheduled event, with a line at now.
+  const origin = whole ? 0 : game.time;
+  const horizon = Math.max(6, ...items.map((i) => Math.ceil(i.time - origin + 1)));
   const list = items.map((i, n) => {
     const f = game.fighters[i.who];
-    return `<li class="theme-${f.theme} ${i.kind}${i.ghost ? ' ghost' : ''}${i.replaced ? ' replaced' : ''}" data-qi="${n}"><span class="qi">${QUEUE_ICONS[i.type] || '•'}</span><span class="qt">t=${fmt(i.time)}</span><span class="qd">+${fmt(i.time - game.time)}</span><span>${i.label}</span></li>`;
+    return `<li class="theme-${f.theme} ${i.kind}${i.ghost ? ' ghost' : ''}${i.replaced ? ' replaced' : ''}${i.past ? ' past' : ''}" data-qi="${n}"><span class="qi">${QUEUE_ICONS[i.type] || '•'}</span><span class="qt">t=${fmt(i.time)}</span><span class="qd">${i.time < game.time - 1e-9 ? '−' : '+'}${fmt(Math.abs(i.time - game.time))}</span><span>${i.label}</span></li>`;
   }).join('');
   const q = $('queue');
   if (!q.querySelector('.track')) {
-    q.innerHTML = `<div class="section-label">Initiative queue</div>
+    q.innerHTML = `<div class="queue-head"><span class="section-label">Initiative queue</span>
+        <span class="q-toggle"><button class="ghost" data-qmode="ahead">Ahead</button><button class="ghost" data-qmode="all">Whole fight</button></span></div>
       <div class="track"><div class="track-now"></div><div class="track-end"></div></div>
       <ul class="qlist"></ul>`;
   }
-  updateTrack(q.querySelector('.track'), items, horizon);
-  animateLabel(q.querySelector('.track-end'), horizon);
-  q.querySelector('.qlist').innerHTML = list;
+  q.querySelectorAll('[data-qmode]').forEach((b) => b.classList.toggle('on', (b.dataset.qmode === 'all') === whole));
+  const track = q.querySelector('.track');
+  track.style.setProperty('--now', game.time - origin);
+  updateTrack(track, items, horizon, origin);
+  animateLabel(q.querySelector('.track-end'), horizon, whole ? 't=' : '+');
+  const ul = q.querySelector('.qlist');
+  ul.innerHTML = list;
+  if (whole) {
+    // Keep the present in view: scroll to the first item that hasn't happened yet.
+    const next = ul.querySelector('li:not(.past)');
+    if (next) ul.scrollTop = Math.max(0, next.offsetTop - ul.offsetTop - 2 * next.offsetHeight);
+  }
 }
 
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-qmode]');
+  if (!b) return;
+  ui.queueAll = b.dataset.qmode === 'all';
+  try { localStorage.setItem('queueMode', ui.queueAll ? 'all' : 'ahead'); } catch { /* storage unavailable */ }
+  renderGhost();
+});
+
 // The "+N" length label counts to its new value instead of jumping.
-function animateLabel(el, target) {
+function animateLabel(el, target, prefix = '+') {
   const from = Number(el.dataset.value || target);
   el.dataset.value = target;
-  if (from === target) { el.textContent = `+${fmt(target)}`; return; }
+  if (from === target) { el.textContent = `${prefix}${fmt(target)}`; return; }
   const start = performance.now();
   const step = (now) => {
     const k = Math.min(1, (now - start) / 500);
-    el.textContent = `+${Math.round(from + (target - from) * k)}`;
+    el.textContent = `${prefix}${Math.round(from + (target - from) * k)}`;
     if (k < 1 && el.dataset.value === String(target)) requestAnimationFrame(step);
   };
   requestAnimationFrame(step);
@@ -436,11 +463,11 @@ function animateLabel(el, target) {
 // shape; data-qi links it to its list row.
 // Positions are ticks-from-now (--offset) over the timeline length (--horizon); both animate in CSS,
 // so time passing slides markers left and a change of length zooms the timeline smoothly.
-function updateTrack(track, items, horizon) {
+function updateTrack(track, items, horizon, origin = game.time) {
   track.style.setProperty('--horizon', horizon);
   const seen = new Set();
   items.forEach((i, n) => {
-    if (i.time - game.time > horizon) return;
+    if (i.time - origin > horizon) return;
     const key = i.ghost ? `ghost:${n}` : i.key;
     seen.add(key);
     const f = game.fighters[i.who];
@@ -451,13 +478,14 @@ function updateTrack(track, items, horizon) {
       el.dataset.key = key;
       el.innerHTML = '<div class="shape"></div>';
       el.className = `${cls}${i.ghost ? '' : ' entering'}`;
-      el.style.setProperty('--offset', i.time - game.time);
+      el.style.setProperty('--offset', i.time - origin);
       track.appendChild(el);
       if (!i.ghost) setTimeout(() => el.classList.remove('entering'), 30);
     } else {
       el.className = cls;
     }
-    el.style.setProperty('--offset', i.time - game.time);
+    el.style.setProperty('--offset', i.time - origin);
+    el.classList.toggle('past', !!i.past);
     el.dataset.qi = n;
     el.dataset.time = i.time;
     el.title = `t=${fmt(i.time)} ${i.label}${i.detail ? `\n${i.detail}` : ''}`;
@@ -467,7 +495,7 @@ function updateTrack(track, items, horizon) {
     if (el.classList.contains('ghost')) { el.remove(); continue; }
     el.classList.add('leaving');
     delete el.dataset.qi;
-    el.style.setProperty('--offset', Math.max(0, Number(el.dataset.time) - game.time));
+    el.style.setProperty('--offset', Math.max(0, Number(el.dataset.time) - origin));
     setTimeout(() => el.remove(), 600);
   }
 }
