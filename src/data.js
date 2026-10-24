@@ -193,7 +193,7 @@ export const FIGHTERS_RAW = [
   {
     id: 'eithan', name: 'Eithan', path: 'hollowKing', stage: 'Lowgold', theme: 'pure',
     // Sees everything and moves well; fragile, with little raw power.
-    steps: { perception: 3, control: 1, pool: 5, speed: 1, cap: -1, toughness: -3, health: -2 },
+    steps: { perception: 5, pool: 5, speed: 1, precision: -1, cap: -1, toughness: -3, health: -2 },
     traits: [], weapon: { name: 'scissors', blade: true, damage: 0 },
   },
   {
