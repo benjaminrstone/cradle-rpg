@@ -427,11 +427,18 @@ function renderQueue(ghost = null) {
   updateTrack(track, items, horizon, origin);
   animateLabel(q.querySelector('.track-end'), horizon, whole ? 't=' : '+');
   const ul = q.querySelector('.qlist');
+  const kept = ul.scrollTop;
   ul.innerHTML = list;
-  if (whole) {
-    // Keep the present in view: scroll to the first item that hasn't happened yet.
-    const next = ul.querySelector('li:not(.past)');
-    if (next) ul.scrollTop = Math.max(0, next.offsetTop - ul.offsetTop - 2 * next.offsetHeight);
+  // Leave the list where the reader put it, except when time moves on or the view changes: then,
+  // in the whole-fight view, bring the present (the first item that hasn't happened) into view.
+  const moved = ui.queueScrollAt !== `${game.time}:${whole}`;
+  ui.queueScrollAt = `${game.time}:${whole}`;
+  const next = whole && moved ? ul.querySelector('li:not(.past)') : null;
+  if (next) {
+    const offset = next.getBoundingClientRect().top - ul.getBoundingClientRect().top + ul.scrollTop;
+    ul.scrollTop = Math.max(0, offset - 2 * next.offsetHeight);
+  } else if (!moved) {
+    ul.scrollTop = kept;
   }
 }
 
