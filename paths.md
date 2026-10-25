@@ -71,10 +71,11 @@ Force madra and Oathsign script circles. It holds ground behind barriers and an 
 | Stone Anchor | Enforcer stance | 5 to raise | 1 | +6 damage reduction against physical and technique hits, and your stances take 50% more to break (24 at Control 5). Upkeep 0.5 madra per tick |
 | Oathsign: Force Ring | Enforcer | Any, up to channel cap | Madra ÷ 3 | Script rings multiply a hammer blow: 10 + weapon + madra × efficiency, physical: 22 / 29 / 40 with the hammer. Close range only |
 | Oathsign: Barrier | Forger | Any, up to channel cap | Madra ÷ 3 | A script-circle shield with HP of 2 × madra, filling in as it builds while you keep acting. It soaks physical, technique and piercing hits aimed at you before they reach you; other spiritual hits pass through. Casting again adds to it |
+| Oathsign: Accelerate | Forger | 6 | 2 | A script ring Forged around you: +10 Speed while it lasts. Rings stack. Your next turn comes when it forms. Each ring is a 6-HP construct sitting on you, so it can be targeted, area attacks hit it, and Madra Pulse cancels it |
 | Oathsign: Launch | Forger | 4 | 0.5 travel | A ring flings you one range band, in or out, in 0.5 ticks; your next turn comes 1 tick after you land |
 | Oathsign: Seal | Forger | 10 | 2 | A script circle Forged on your opponent. Rolled disruption: if it hits, it breaks all their wind-ups and stances. Any range; best at Mid |
 
-**Learning the Path:** Stone Anchor, Force Ring and the barrier are core (free). Launch costs 1 point; Seal costs 2.
+**Learning the Path:** the Path has two techniques, Stone Anchor and Oathsign, and both are core (free). Oathsign's uses (Force Ring, Barrier, Accelerate, Launch and Seal) share one card.
 
 **How you win:** be hard to hurt and hard to break. Stone Anchor and a barrier soak what gets through, Seal strips the opponent's stances and wind-ups from any range, and Launch puts you in hammer range before they can step away.
 

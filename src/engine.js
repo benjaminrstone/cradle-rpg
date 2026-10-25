@@ -128,8 +128,9 @@ export class Game {
     return st.raisedAt + (this.buildUp(f, def) + 1) * def.buildUp.every;
   }
 
-  speed(f) {
-    let s = f.stats.speed;
+  // extra: Speed from a ring that isn't formed yet, for previews.
+  speed(f, extra = 0) {
+    let s = f.stats.speed + extra + this.rings(f).reduce((sum, c) => sum + c.speedBonus, 0);
     for (const def of this.activeStances(f)) {
       if (def.speedMult) s *= def.speedMult;
       if (def.buildUp) s *= 1 + def.buildUp.speed * this.buildUp(f, def);
@@ -163,6 +164,7 @@ export class Game {
 
   barrier(f) { return f.constructs.find((c) => c.kind === 'barrier'); }
   stars(f) { return f.constructs.filter((c) => c.kind === 'star'); }
+  rings(f) { return f.constructs.filter((c) => c.kind === 'ring'); }
 
   // Where a construct is, for range checks. The Crown hangs high overhead at Far range;
   // barriers sit on their owner, at the fighters' current distance.
@@ -404,12 +406,14 @@ export class Game {
         opts.push({ key: `drop:${t.id}`, label: `Drop ${t.name}`, group: 'drop' });
         continue;
       }
+      const cardInfo = { card: t.card, cardTitle: t.cardTitle || t.name, cardType: t.cardType, cardDesc: t.cardDesc };
       if (t.kind === 'launch') {
-        opts.push({ key: `${t.id}:in`, label: `${t.name} in`, group: 'path', type: t.type, desc: t.desc });
-        opts.push({ key: `${t.id}:out`, label: `${t.name} away`, group: 'path', type: t.type, desc: t.desc });
+        const name = t.label || t.name;
+        opts.push({ key: `${t.id}:in`, label: `${name} in`, group: 'path', type: t.type, desc: t.desc, ...cardInfo });
+        opts.push({ key: `${t.id}:out`, label: `${name} away`, group: 'path', type: t.type, desc: t.desc, ...cardInfo });
         continue;
       }
-      let opt = { key: t.id, label: t.label || t.name, group: 'path', type: t.type, desc: t.desc, card: t.card, cardTitle: t.name, cardDesc: t.cardDesc };
+      let opt = { key: t.id, label: t.label || t.name, group: 'path', type: t.type, desc: t.desc, ...cardInfo };
       if (t.kind === 'command') {
         const n = this.stars(f).length;
         if (n >= 1) opt.slider = { label: 'Stars', min: 1, max: n, step: 1, initial: n };
@@ -542,6 +546,19 @@ export class Game {
         : `If it hits, breaks ${o.name}'s wind-ups and stances · ${this.hitText(f, o, prof)}`);
       if (gate.note) lines.push(gate.note);
       return { enabled: enough, reason: enough ? '' : 'Not enough madra', warning: gate.warning, lines };
+    }
+    if (t.kind === 'ring') {
+      const enough = f.madra >= t.fixedCost;
+      const w = this.twind(t, t.windup, f.stats.control);
+      const n = this.rings(f).length;
+      return {
+        enabled: enough, reason: enough ? '' : 'Not enough madra',
+        lines: [
+          `Costs ${t.fixedCost} madra · ring forms at t=${fmt(this.time + w)} · next turn then`,
+          `Speed ${fmt(this.speed(f))} → ${fmt(this.speed(f, t.speedBonus))}${n ? ` (${n + 1} rings)` : ''}`,
+          `Ring HP ${t.fixedCost}, on you: it can be targeted, and area attacks hit it`,
+        ],
+      };
     }
 
     const max = this.maxMadra(f, t);
@@ -713,6 +730,14 @@ export class Game {
       q(this.time + w, `${t.name} lands`, 'attack');
       nextTurn(this.time + w);
       out.notes[o.index] = t.area ? 'wind-ups, stances and constructs break' : 'if it hits: wind-ups and stances break';
+      return out;
+    }
+    if (t.kind === 'ring') {
+      spendM(t.fixedCost);
+      const w = this.twind(t, t.windup, f.stats.control);
+      q(this.time + w, `${t.ringName} forms`, 'construct');
+      nextTurn(this.time + w);
+      out.notes[f.index] = `+${t.speedBonus} Speed once it forms`;
       return out;
     }
 
@@ -937,6 +962,12 @@ export class Game {
         this.startWindup(f, w, { kind: 'disrupt', id: t.id, profile: this.disruptProfile(f, t) }, t.fixedCost);
         f.nextTurn = this.time + w;
         this.addLog(`${f.name} winds up ${t.name} (lands t=${fmt(this.time + w)}).`, '', f.index);
+      } else if (t.kind === 'ring') {
+        this.spend(f, t.fixedCost, burn);
+        const w = this.twind(t, t.windup, f.stats.control);
+        this.startWindup(f, w, { kind: 'ring', id: t.id }, t.fixedCost, { label: t.ringName });
+        f.nextTurn = this.time + w;
+        this.addLog(`${f.name} begins Forging an ${t.ringName} (${t.fixedCost} madra; forms t=${fmt(this.time + w)}).`, '', f.index);
       } else {
         const step = t.madraStep || 1;
         const madra = Math.min(Math.max(t.minMadra || 1, Math.round(amount / step) * step), Math.floor(this.maxMadra(f, t) / step) * step);
@@ -1178,6 +1209,7 @@ export class Game {
       return `When dropped: ${res.dmg} spirit damage to ${o.name} · ${pct(this.hitChance(f, o, this.starProfile(f, a.madra)))} to hit${herThreshold(res)}`;
     }
     if (a.kind === 'stance') return `Raises ${this.tech(f, a.id).name}`;
+    if (a.kind === 'ring') return `+${this.tech(f, a.id).speedBonus} Speed for ${f.name}`;
     if (a.kind === 'piece') return `Adds ${fmt(a.madra * 2 * ((this.tech(f, a.id) || {}).sizeMult || 1))} HP to ${f.name}'s barrier`;
     if (a.kind === 'move') return '';
     const prof = a.profile;
@@ -1325,6 +1357,13 @@ export class Game {
       this.addLog(`${f.name}'s Crown gains a ${a.madra}-madra star: ${this.stars(f).length} overhead.`, '', f.index);
       return;
     }
+    if (a.kind === 'ring') {
+      const t = this.tech(f, a.id);
+      f.constructs.push({ id: `c${this.nextId++}`, kind: 'ring', name: t.ringName, hp: t.fixedCost, maxHp: t.fixedCost, madra: t.fixedCost, speedBonus: t.speedBonus });
+      const n = this.rings(f).length;
+      this.addLog(`${f.name}'s ${t.ringName} forms: +${t.speedBonus} Speed (${n} ring${n > 1 ? 's' : ''}, Speed ${fmt(this.speed(f))}).`, '', f.index);
+      return;
+    }
     if (a.kind === 'stance') {
       f.stances[a.id] = { raisedAt: this.time };
       this.addLog(`${f.name}'s ${this.tech(f, a.id).name} is up.`, '', f.index);
@@ -1445,8 +1484,9 @@ export class Game {
       : k === 'stance' ? `${(this.tech(f, e.action.id) || {}).name} is up`
       : k === 'piece' ? `barrier piece ${e.action.n}/${e.action.of} forms`
       : k === 'forged' ? `Crown star (${e.action.madra}) forms`
+      : k === 'ring' ? `${(this.tech(f, e.action.id) || {}).ringName} forms`
       : `${e.action.profile.name} lands`;
-    const type = k === 'move' ? 'move' : k === 'stance' ? 'stance' : k === 'piece' || k === 'forged' ? 'construct' : 'attack';
+    const type = k === 'move' ? 'move' : k === 'stance' ? 'stance' : k === 'piece' || k === 'forged' || k === 'ring' ? 'construct' : 'attack';
     return { key: `ev:${e.id}`, time: e.time, label: `${f.name}: ${label}`, detail: this.describeEvent(e), who: e.actor, kind: 'resolve', type };
   }
 

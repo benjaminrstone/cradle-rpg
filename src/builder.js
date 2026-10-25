@@ -86,7 +86,7 @@ function render() {
         <span class="muted small">${core ? 'core, free' : `${t.cost} pt`}</span>
         ${rc ? `<span class="b-cost ${rc < 0 ? 'refund' : ''}">refinements ${rc} pt</span>` : ''}
       </label>
-      <div class="muted small b-desc">${t.cardDesc || t.desc}</div>
+      <div class="muted small b-desc">${t.desc || t.cardDesc}</div>
       ${refineRows}
     </div>`;
   }).join('');

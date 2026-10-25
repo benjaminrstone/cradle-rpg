@@ -30,6 +30,12 @@ export const STAT_GROUPS = [
   ['Mind', [['precision', 'Precision'], ['control', 'Control'], ['perception', 'Perception']]],
 ];
 
+// Oathsign is one technique with many uses; they share a card.
+const OATHSIGN = {
+  card: 'oathsign', cardTitle: 'Oathsign', cardType: 'Enforcer / Forger',
+  cardDesc: 'Script circles of force madra, Forged for whatever the fight needs: rings around the hammer for a heavy blow, a shield, a ring for Speed, a ring that flings you a range band, and a seal that breaks the opponent’s techniques.',
+};
+
 export const PATHS = {
   blackFlame: {
     name: 'Path of Black Flame',
@@ -138,22 +144,27 @@ export const PATHS = {
         desc: '+6 damage reduction (not against spiritual hits), and your stances take 50% more to break. Upkeep 0.5 madra per tick.',
       },
       {
-        id: 'forceRing', name: 'Oathsign: Force Ring', kind: 'attack', type: 'Enforcer', dtype: 'physical',
+        id: 'forceRing', name: 'Oathsign: Force Ring', label: 'Force Ring', ...OATHSIGN, kind: 'attack', type: 'Enforcer', dtype: 'physical',
         divisor: 3, toHit: 0, ranges: [0], bestRange: 0, base: 10, physical: true, weaponBonus: true,
         desc: 'Script rings around the hammer multiply the blow: 10 + weapon + madra × efficiency, physical. Close range only.',
       },
       {
-        id: 'barrier', name: 'Oathsign: Barrier', kind: 'construct', type: 'Forger', construct: 'barrier',
+        id: 'barrier', name: 'Oathsign: Barrier', label: 'Barrier', ...OATHSIGN, kind: 'construct', type: 'Forger', construct: 'barrier',
         divisor: 3,
         desc: 'A script-circle shield with HP of 2 × madra, filling in as it builds while you keep acting. It soaks physical, technique and piercing hits aimed at you before they reach you; other spiritual hits pass through it. Casting again adds to it.',
       },
       {
-        id: 'launch', cost: 1, name: 'Oathsign: Launch', kind: 'launch', type: 'Forger',
+        id: 'accelerate', name: 'Oathsign: Accelerate', label: 'Accelerate', ...OATHSIGN, kind: 'ring', type: 'Forger',
+        fixedCost: 6, windup: 2, speedBonus: 10, ringName: 'Accelerate ring',
+        desc: 'A script ring Forged around you: +10 Speed while it lasts, and rings stack. It takes 2 ticks to form, and your next turn comes when it does. Each ring is a construct with 6 HP that sits on you: it can be targeted, area attacks hit it, and Madra Pulse can cancel it.',
+      },
+      {
+        id: 'launch', name: 'Oathsign: Launch', label: 'Launch', ...OATHSIGN, kind: 'launch', type: 'Forger',
         fixedCost: 4, travel: 0.5, recovery: 1,
         desc: 'A ring flings you one range band in 0.5 ticks; your next turn comes 1 tick after you land.',
       },
       {
-        id: 'seal', cost: 2, name: 'Oathsign: Seal', kind: 'disrupt', type: 'Forger',
+        id: 'seal', name: 'Oathsign: Seal', label: 'Seal', ...OATHSIGN, kind: 'disrupt', type: 'Forger',
         fixedCost: 10, windup: 2, toHit: 0, ranges: [0, 1, 2], bestRange: 1,
         desc: 'A script circle Forged on your opponent. Rolled; if it hits, it breaks all their wind-ups and stances. No damage. Any range; best at Mid.',
       },

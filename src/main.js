@@ -135,7 +135,7 @@ function renderFighter(f, ghost = null) {
   // Techniques this fighter has used so far, expandable to their full description.
   const seen = (f.seen || []).map((id) => game.tech(f, id)).filter(Boolean).map((t) => {
     const key = `${f.index}:seen:${t.id}`;
-    const name = t.label && t.label !== t.name ? `${t.name}: ${t.label}` : t.name;
+    const name = t.label && !t.name.endsWith(t.label) ? `${t.name}: ${t.label}` : t.name;
     return `<li><details data-stance="${key}" ${ui.openStances.has(key) ? 'open' : ''}><summary><b>${name}</b> <span class="muted">${t.type || ''}</span></summary>`
       + `<div class="stance-desc">${t.desc || t.cardDesc || ''}</div></details></li>`;
   }).join('');
@@ -226,7 +226,7 @@ function multiCard(f, list) {
     return `<div class="card-part${c.enabled ? '' : ' disabled'}${c.warn ? ' warn' : ''}" data-card="${o.key}">${c.html}</div>`;
   }).join('');
   return `<div class="card">
-    <div class="card-head"><span class="card-name">${first.cardTitle}</span>${first.type ? `<span class="tag">${first.type}</span>` : ''}</div>
+    <div class="card-head"><span class="card-name">${first.cardTitle}</span>${first.cardType || first.type ? `<span class="tag">${first.cardType || first.type}</span>` : ''}</div>
     ${first.cardDesc ? `<div class="card-desc">${first.cardDesc}</div>` : ''}
     ${parts}
   </div>`;
