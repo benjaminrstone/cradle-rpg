@@ -93,6 +93,6 @@ Body and Spirit steps are fractions of the stage's typical value, so they scale 
 - **Technique damage:** about 1.5–2 damage per point of madra spent.
 - **Interrupts:** a hit interrupts if, after damage reduction, it deals at least 1.6 × Control% of the defender's max Health (8 at Control 5). Spiritual hits count double. It breaks everything the defender is winding up, except plain strikes; an enforced strike drops to a plain strike.
 - **Breaking stances:** stances are held more firmly. A hit of at least twice the interrupt threshold (16 at Control 5) breaks every stance the defender holds: they drop and can't be raised again until the re-raise delay passes.
-- **Physical action time:** base time × 100 / Speed.
+- **Physical action time:** base time × (100 / Speed)². A strike's base time is 2 ticks, a move's 3 and a dodge's 2.
 - **Technique wind-up:** 3% shorter per point of Control.
 - **Upkeep and re-raise delay:** 5% lower per point of Control.

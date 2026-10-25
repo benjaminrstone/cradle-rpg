@@ -448,9 +448,8 @@ export class Game {
     if (key === 'strike') {
       const prof = this.attackProfile(f, 'strike');
       const w = R.physTime(R.TIMING.strikeWindup, spd);
-      const next = R.physTime(R.TIMING.strikeWindup + R.TIMING.strikeRecovery, spd);
       const gate = tc ? this.constructGate([0], tc, 'Close range only') : this.rangeGate([0], this.time + w, 'Close range only');
-      const lines = [`Wind-up ${fmt(w)} · next turn in ${fmt(next)}`, attackLines(prof, prof.hits)];
+      const lines = [`Wind-up ${fmt(w)} · next turn in ${fmt(w)}`, attackLines(prof, prof.hits)];
       if (gate.note) lines.push(gate.note);
       return { enabled: true, reason: '', warning: gate.warning, lines };
     }
@@ -484,7 +483,7 @@ export class Game {
         enabled: !locked && enough,
         reason,
         lines: [
-          `Costs ${t.raiseCost} madra · wind-up ${fmt(w)} · next turn in ${fmt(w + R.TIMING.techRecovery)}`,
+          `Costs ${t.raiseCost} madra · wind-up ${fmt(w)} · next turn in ${fmt(w)}`,
           `Upkeep ${fmt(t.upkeep * R.controlFactor(f.stats.control))} madra per tick${t.buildUp ? ', rising with build-up' : ''}`,
         ],
       };
@@ -523,7 +522,7 @@ export class Game {
       const gate = this.rangeGate(t.ranges, this.time + w, 'Out of range (Close)');
       const targets = this.pulseTargets(o, madra, t.ranges);
       const lines = [
-        `Wind-up ${fmt(w)} (lands t=${fmt(this.time + w)}) · next turn in ${fmt(w + R.TIMING.techRecovery)}`,
+        `Wind-up ${fmt(w)} (lands t=${fmt(this.time + w)}) · next turn in ${fmt(w)}`,
         `Cancels ${o.name}'s wind-ups, stances and constructs costing up to ${fmt(madra / 2)} · no roll`,
         targets.length ? `Right now: ${targets.map((x) => `${x.name} (${fmt(x.cost)})`).join(', ')}` : `Nothing of ${o.name}'s is that cheap right now`,
         `${o.name} can block it at double cost: each point takes 1.5 off its strength`,
@@ -537,7 +536,7 @@ export class Game {
       const rangeText = `Out of range (${t.ranges.map((r) => R.RANGES[r]).join('/')})`;
       const gate = this.rangeGate(t.ranges, this.time + w, rangeText);
       const prof = this.disruptProfile(f, t);
-      const lines = [`Costs ${t.fixedCost} madra · wind-up ${fmt(w)} (lands t=${fmt(this.time + w)}) · next turn in ${fmt(w + R.TIMING.techRecovery)}`];
+      const lines = [`Costs ${t.fixedCost} madra · wind-up ${fmt(w)} (lands t=${fmt(this.time + w)}) · next turn in ${fmt(w)}`];
       lines.push(t.area
         ? `Breaks ${o.name}'s wind-ups, stances${t.destroysConstructs ? ' and constructs' : ''} at ${t.ranges.map((r) => R.RANGES[r]).join('/')} range · no roll`
         : `If it hits, breaks ${o.name}'s wind-ups and stances · ${this.hitText(f, o, prof)}`);
@@ -551,7 +550,7 @@ export class Game {
     const madra = Math.min(Math.max(t.minMadra || 1, Math.round(amount / step) * step), Math.floor(max / step) * step);
     const nominal = R.nominalWindup(madra, t.divisor);
     const w = this.twind(t, nominal, f.stats.control);
-    const next = (t.ruler ? 0 : w) + R.TIMING.techRecovery;
+    const next = t.ruler ? R.TIMING.actWhileBuilding : w;
     const timing = `${t.costMult ? `Costs ${fmt(madra * t.costMult)} madra · ` : ''}Wind-up ${fmt(w)} (lands t=${fmt(this.time + w)}) · next turn in ${fmt(next)}${t.ruler ? ' (Ruler: act while it builds)' : ''}`;
 
     if (t.kind === 'forge') {
@@ -566,7 +565,7 @@ export class Game {
     }
     if (t.kind === 'construct') {
       const pieces = this.forgePieces(t, madra);
-      const build = `Builds over ${fmt(w)} ticks, one piece every ${fmt(w / pieces.length)} · next turn in ${fmt(R.TIMING.techRecovery)} (Forger: act while it builds)`;
+      const build = `Builds over ${fmt(w)} ticks, one piece every ${fmt(w / pieces.length)} · next turn in ${fmt(R.TIMING.actWhileBuilding)} (Forger: act while it builds)`;
       const line = `Barrier HP +${fmt(madra * 2 * (t.sizeMult || 1))}${this.barrier(f) ? ` (now ${fmt(this.barrier(f).hp)})` : ''}, filling in as it builds`;
       return { enabled: true, reason: '', lines: [build, line] };
     }
@@ -659,7 +658,7 @@ export class Game {
     if (key === 'strike') {
       const prof = this.attackProfile(f, 'strike');
       q(this.time + R.physTime(R.TIMING.strikeWindup, spd), `${prof.name} lands`, 'attack');
-      nextTurn(this.time + R.physTime(R.TIMING.strikeWindup + R.TIMING.strikeRecovery, spd));
+      nextTurn(this.time + R.physTime(R.TIMING.strikeWindup, spd));
       hitDelta(prof, prof.hits);
       return out;
     }
@@ -679,7 +678,7 @@ export class Game {
       spendM(t.raiseCost);
       const w = this.twind(t, R.TIMING.stanceWindup, f.stats.control);
       q(this.time + w, `${t.name} is up`, 'stance');
-      nextTurn(this.time + w + R.TIMING.techRecovery);
+      nextTurn(this.time + w);
       return out;
     }
     if (t.kind === 'launch') {
@@ -703,7 +702,7 @@ export class Game {
       spendM(madra);
       const w = this.twind(t, R.nominalWindup(madra, t.divisor), f.stats.control);
       q(this.time + w, `${t.name} lands`, 'attack');
-      nextTurn(this.time + w + R.TIMING.techRecovery);
+      nextTurn(this.time + w);
       const targets = this.pulseTargets(o, madra, t.ranges);
       out.notes[o.index] = targets.length ? `unless blocked: ${targets.map((x) => x.name).join(', ')} break` : 'nothing cheap enough to break';
       return out;
@@ -712,7 +711,7 @@ export class Game {
       spendM(t.fixedCost);
       const w = this.twind(t, t.windup, f.stats.control);
       q(this.time + w, `${t.name} lands`, 'attack');
-      nextTurn(this.time + w + R.TIMING.techRecovery);
+      nextTurn(this.time + w);
       out.notes[o.index] = t.area ? 'wind-ups, stances and constructs break' : 'if it hits: wind-ups and stances break';
       return out;
     }
@@ -726,7 +725,7 @@ export class Game {
       q(this.time + w, `star (${madra}) forms`, 'construct');
       return out;
     }
-    nextTurn(this.time + (t.ruler || t.kind === 'construct' ? 0 : w) + R.TIMING.techRecovery);
+    nextTurn(this.time + (t.ruler || t.kind === 'construct' ? R.TIMING.actWhileBuilding : w));
     if (t.kind === 'construct') {
       const pieces = this.forgePieces(t, madra);
       pieces.forEach((pc, i) => q(this.time + w * ((i + 1) / pieces.length), `barrier piece ${i + 1}/${pieces.length} forms`, 'construct'));
@@ -896,7 +895,7 @@ export class Game {
       const prof = { ...this.attackProfile(f, 'strike'), target };
       const w = R.physTime(R.TIMING.strikeWindup, spd);
       this.startWindup(f, w, { kind: 'attack', profile: prof }, 0);
-      f.nextTurn = this.time + R.physTime(R.TIMING.strikeWindup + R.TIMING.strikeRecovery, spd);
+      f.nextTurn = this.time + R.physTime(R.TIMING.strikeWindup, spd);
       this.addLog(`${f.name} winds up a strike${aimed}.`, '', f.index);
     } else if (key === 'moveIn' || key === 'moveOut') {
       this.startMove(f, key === 'moveIn' ? -1 : 1, R.physTime(R.TIMING.move, spd), 0);
@@ -911,7 +910,7 @@ export class Game {
         this.spend(f, t.raiseCost, burn);
         const w = this.twind(t, R.TIMING.stanceWindup, f.stats.control);
         this.startWindup(f, w, { kind: 'stance', id: t.id }, t.raiseCost);
-        f.nextTurn = this.time + w + R.TIMING.techRecovery;
+        f.nextTurn = this.time + w;
         this.addLog(`${f.name} begins raising ${t.name} (${t.raiseCost} madra).`, '', f.index);
       } else if (t.kind === 'launch') {
         this.spend(f, t.fixedCost, burn);
@@ -930,13 +929,13 @@ export class Game {
         this.spend(f, madra, burn);
         const w = this.twind(t, R.nominalWindup(madra, t.divisor), f.stats.control);
         this.startWindup(f, w, { kind: 'pulse', id: t.id, profile: this.pulseProfile(f, t, madra) }, madra);
-        f.nextTurn = this.time + w + R.TIMING.techRecovery;
+        f.nextTurn = this.time + w;
         this.addLog(`${f.name} winds up ${t.name} with ${madra} madra (lands t=${fmt(this.time + w)}).`, '', f.index);
       } else if (t.kind === 'disrupt') {
         this.spend(f, t.fixedCost, burn);
         const w = this.twind(t, t.windup, f.stats.control);
         this.startWindup(f, w, { kind: 'disrupt', id: t.id, profile: this.disruptProfile(f, t) }, t.fixedCost);
-        f.nextTurn = this.time + w + R.TIMING.techRecovery;
+        f.nextTurn = this.time + w;
         this.addLog(`${f.name} winds up ${t.name} (lands t=${fmt(this.time + w)}).`, '', f.index);
       } else {
         const step = t.madraStep || 1;
@@ -954,7 +953,7 @@ export class Game {
             const prof = { ...this.attackProfile(f, key, madra), target };
             this.startWindup(f, w, { kind: 'attack', profile: prof }, madra * (t.costMult || 1), { boostPerMadra: t.boostPerMadra || 0 });
           }
-          f.nextTurn = this.time + (t.ruler || t.kind === 'construct' ? 0 : w) + R.TIMING.techRecovery;
+          f.nextTurn = this.time + (t.ruler || t.kind === 'construct' ? R.TIMING.actWhileBuilding : w);
           this.addLog(t.kind === 'construct'
             ? `${f.name} begins Forging ${t.name} with ${madra} madra (complete at t=${fmt(this.time + w)}).`
             : `${f.name} winds up ${t.name} with ${madra} madra${aimed} (lands t=${fmt(this.time + w)}).`, '', f.index);

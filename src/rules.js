@@ -3,15 +3,14 @@
 export const RANGES = ['Close', 'Mid', 'Far'];
 
 export const TIMING = {
-  strikeWindup: 1,      // physical, scaled by Speed
-  strikeRecovery: 2,    // physical, scaled by Speed
+  strikeWindup: 2,      // physical, scaled by Speed
   move: 3,              // physical, scaled by Speed
   dodge: 2,             // physical, scaled by Speed; pushes your next action later
   blockDelay: 1,        // pushes your next action later
   waitDefault: 2,
   waitMin: 0.5,
   waitMax: 10,
-  techRecovery: 2,
+  actWhileBuilding: 2,  // Ruler techniques and Forged barriers: next turn this soon after starting
   stanceWindup: 1,      // technique wind-up, scaled by Control
   reraiseDelay: 4,      // scaled by Control
   interruptStagger: 1,  // an interrupted fighter's next action comes this soon
@@ -40,8 +39,9 @@ export function controlFactor(control) {
   return 1 - 0.05 * control;
 }
 
+// Speed counts squared, so fast fighters act much more often.
 export function physTime(base, speed) {
-  return (base * 100) / speed;
+  return base * (100 / speed) ** 2;
 }
 
 export function speedMod(defenderSpeed, attackerSpeed) {

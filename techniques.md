@@ -6,10 +6,10 @@ Numbers are for a typical fighter in units of their own stage (see stats.md): He
 
 - **Wind-up** is the time until a technique lands. It's public and can be interrupted. Control shortens it by 3% per point.
 - **Strikes can't be broken.** A plain strike has no madra to disrupt, so interrupts and Madra Pulse don't stop it. A broken enforced strike loses its madra like any wind-up, but still lands as a plain strike at the same time.
-- **Recovery** is the time after it lands before your next turn: 2 ticks by default.
+- **No recovery:** your next turn comes as soon as your action lands.
 - **Scaling techniques:** for most techniques, you choose how much madra to put in, up to your channel cap (Ruler techniques have no cap). Wind-up = madra ÷ 3 (minimum 1); Striker techniques are faster at madra ÷ 4, and Ruler techniques slower at madra ÷ 2. A small, fast shot and a slow, heavy blast are the same technique. Stances have a fixed cost.
 - **Damage = madra × efficiency.** Efficiency = 1.2 + 0.1 × the longer of (madra ÷ 3) and the wind-up, up to 2.2. Bigger techniques get more damage per madra, and techniques slower than madra ÷ 3 get a little extra for it.
-- **Ruler techniques** have a long wind-up, but your next turn comes after the normal recovery, so you keep acting while they build.
+- **Ruler techniques** have a long wind-up, but your next turn comes 2 ticks after you start, so you keep acting while they build. Forged barriers work the same way.
 - **Several wind-ups at once:** a fighter can have more than one technique winding up. A hit over their threshold breaks all of them.
 - **Stances break too,** but take twice the threshold. A hit that big drops every stance you hold.
 - **To-hit:** fast, precise techniques get +1 or +2. Heavy, slow ones get −1.
