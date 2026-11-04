@@ -4,7 +4,7 @@
     {
       "name": "cradle-duel",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["serve.py", "8123"],
+      "runtimeArgs": ["serve.py"],
       "port": 8123
     },
     {

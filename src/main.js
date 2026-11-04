@@ -3,6 +3,7 @@ import { STAT_GROUPS, TRAITS } from './data.js';
 import { allFighters } from './builds.js';
 import { openBuilder } from './builder.js';
 import { RANGES } from './rules.js';
+import { parsePoint } from './arena.js';
 import { renderField } from './field.js';
 import { initClaude, claudeToAct, waitingPanel, syncClaude, claudeSide, syncFetch } from './claude.js';
 
@@ -122,7 +123,7 @@ function renderFighter(f, ghost = null) {
       + `<div class="stance-desc">${s.desc}</div></details></li>`;
   }).join('');
 
-  const constructs = f.constructs.map((c) => `<li><b>${c.name}</b> — ${fmt(c.hp)} / ${c.maxHp} HP${c.range != null ? ` · ${RANGES[c.range]}` : ''}</li>`).join('');
+  const constructs = f.constructs.map((c) => `<li><b>${c.name}</b> — ${fmt(c.hp)} / ${c.maxHp} HP${c.kind === 'star' ? ' · high overhead' : ''}</li>`).join('');
 
   // Hovering a wind-up shows what it would do to its target if it landed now.
   const pending = f.windups.map((w) => {
@@ -130,7 +131,10 @@ function renderFighter(f, ghost = null) {
     return `<div class="pending${detail ? ' has-detail' : ''}">Winding up <b>${w.label}</b>${w.madra ? ` (${w.madra} madra)` : ''}${w.boost ? ` · boosted +${fmt(w.boost)}` : ''} · lands t=${fmt(w.end)}`
       + `${detail ? `<div class="pending-detail">${detail}</div>` : ''}</div>`;
   }).join('')
-    + (f.moving ? `<div class="pending">Moving ${f.moving.dir < 0 ? 'in' : 'away'} · arrives t=${fmt(f.moving.end)}</div>` : '');
+    + (f.moving ? (() => {
+      const to = f.moving.path[f.moving.path.length - 1];
+      return `<div class="pending">Moving to (${fmt(to.x)}, ${fmt(to.y)}) · arrives t=${fmt(f.moving.end)}</div>`;
+    })() : '');
 
   // Techniques this fighter has used so far, expandable to their full description.
   const seen = (f.seen || []).map((id) => game.tech(f, id)).filter(Boolean).map((t) => {
@@ -203,10 +207,45 @@ function optionControls(f, o, buttonLabel) {
   return {
     enabled: pv.enabled,
     warn: !!pv.warning,
-    html: `${slider}${targetSelect}
+    html: `${slider}${targetSelect}${o.point ? pointPicker(f, o) : ''}
     <div class="card-preview" data-preview="${o.key}">${previewHtml(pv)}</div>
     <button data-act="${o.key}" ${pv.enabled ? '' : 'disabled'}>${buttonLabel}</button>`,
   };
+}
+
+// Moves and Launch: where to. Click the field, or head straight toward or away from the opponent.
+function pointPicker(f, o) {
+  const cur = ui.target[o.key] || '';
+  const p = parsePoint(cur);
+  const them = game.opponent(f).name;
+  const shown = p ? `(${fmt(p.x)}, ${fmt(p.y)})` : cur === 'toward' ? `toward ${them}` : cur === 'away' ? `away from ${them}` : 'click the field, or';
+  const way = (w, label) => `<button class="ghost${cur === w ? ' on' : ''}" data-point="${o.key}" data-way="${w}">${label}</button>`;
+  return `<div class="point-pick">To <b>${shown}</b> ${way('toward', `Toward ${them}`)}${way('away', 'Away')}</div>`;
+}
+
+// A destination clicked on the field goes to every move-like option.
+function pickPoint(pt) {
+  const f = game.current();
+  if (!f) return;
+  for (const o of game.turnOptions(f)) if (o.point) ui.target[o.key] = pt;
+  renderPrompt();
+  renderGhost();
+}
+
+const isPointTarget = (v) => v === 'toward' || v === 'away' || !!parsePoint(v);
+
+// What the field shows: on a person's turn, they can pick a destination; the route ghost is the
+// hovered card's, or else the move already chosen.
+function fieldOpts(ghost) {
+  const p = game.prompt;
+  const human = !!p && p.kind === 'turn' && !claudeToAct(game);
+  let plan = ghost && ghost.path ? ghost.path : null;
+  if (!plan && human && ui.target.move) {
+    const f = game.current();
+    const mv = game.planMove(f, ui.target.move);
+    if (!mv.error) plan = { who: f.index, from: mv.from, path: mv.path };
+  }
+  return { picking: human ? p.fighter : null, plan, onPick: pickPoint };
 }
 
 function optionCard(f, o) {
@@ -509,7 +548,8 @@ function updateTrack(track, items, horizon, origin = game.time) {
 
 function renderTop() {
   $('clock').textContent = `t = ${fmt(game.time)}`;
-  $('range').innerHTML = RANGES.map((r, i) => `<span class="${i === game.distance ? 'on' : ''}">${r}</span>`).join('');
+  const band = game.band();
+  $('range').innerHTML = RANGES.map((r, i) => `<span class="${i === band ? 'on' : ''}">${r}${i === band ? ` · ${fmt(game.gap())} m` : ''}</span>`).join('');
 }
 
 function renderLog() {
@@ -533,12 +573,12 @@ function renderGhost() {
   const ghost = currentGhost();
   game.fighters.forEach((f) => renderFighter(f, ghost));
   renderQueue(ghost);
+  renderField(game, fieldOpts(ghost));
 }
 
 function render() {
   ui.hover = null;
   renderTop();
-  renderField(game);
   renderPrompt();
   renderGhost();
   renderLog();
@@ -579,7 +619,16 @@ document.addEventListener('click', (e) => {
   if (act && !act.disabled) {
     const key = act.dataset.act;
     game.act(key, ui.amount[key] || 0, ui.target[key] || '');
+    // Destinations are for this turn only.
+    for (const k of Object.keys(ui.target)) if (isPointTarget(ui.target[k])) delete ui.target[k];
     render();
+    return;
+  }
+  const point = e.target.closest('[data-point]');
+  if (point) {
+    ui.target[point.dataset.point] = point.dataset.way;
+    renderPrompt();
+    renderGhost();
     return;
   }
   const react = e.target.closest('[data-react]');

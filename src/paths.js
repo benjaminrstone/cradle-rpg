@@ -77,7 +77,7 @@ export const TEMPLATES = {
     label: 'Star crown (Forger)', type: 'Forger',
     knobs: [num('toHit', 'Star to hit', -1, 2, 1, 0), num('sizeMult', 'Star HP ×', 0.5, 2, 0.25, 1)],
     make: (k) => ({ kind: 'forge', divisor: 2, toHit: k.toHit || undefined, sizeMult: k.sizeMult !== 1 ? k.sizeMult : undefined }),
-    describe: () => 'Forge stars high overhead at Far range, one at a time while you keep acting, then drop any number at once. Each hit is spiritual: 2 × the star’s madra, +1 to hit.',
+    describe: () => 'Forge stars high over your head (always Far), one at a time while you keep acting, then drop any number at once. Each hit is spiritual: 2 × the star’s madra, +1 to hit.',
   },
   disrupt: {
     label: 'Disruption (rolled)', type: 'Forger',
@@ -89,7 +89,7 @@ export const TEMPLATES = {
     label: 'Launch (movement)', type: 'Forger',
     knobs: [num('fixedCost', 'Madra', 2, 8, 1, 4), num('recovery', 'Next turn after landing', 0.5, 2, 0.5, 1)],
     make: (k) => ({ kind: 'launch', fixedCost: k.fixedCost, travel: 0.5, recovery: k.recovery }),
-    describe: (k) => `Moves you one range band in 0.5 ticks for ${k.fixedCost} madra; your next turn comes ${k.recovery} tick${k.recovery === 1 ? '' : 's'} after you land.`,
+    describe: (k) => `Flings you up to 7 m in a straight line in 0.5 ticks for ${k.fixedCost} madra; your next turn comes ${k.recovery} tick${k.recovery === 1 ? '' : 's'} after you land.`,
   },
   pulse: {
     label: 'Madra pulse', type: 'Striker / Ruler',

@@ -7,6 +7,9 @@ Usage:
   python tools/duel_move.py block 4                        (reactions: take, dodge, block N, dodgeBlock N)
   python tools/duel_move.py offerDraw , wait 2               (offerDraw / withdrawDraw can go with any move)
   python tools/duel_move.py hollowSpear 10 @c12              (aim a single-target attack at a construct)
+  python tools/duel_move.py move @12.5:8                     (move to a spot on the arena, x:y in metres)
+  python tools/duel_move.py move @toward                     (or straight toward / @away from the opponent)
+  python tools/duel_move.py launch @away                     (Launch takes a destination too)
   python tools/duel_move.py redirect                         (Hollow King's Mantle reaction)
   python tools/duel_move.py --remote strike                  (play on the hosted site; see tools/duelsync.py)
 """

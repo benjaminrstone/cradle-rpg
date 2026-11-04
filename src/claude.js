@@ -3,6 +3,7 @@
 // whenever that side has a decision to make.
 import { fmt } from './engine.js';
 import { RANGES } from './rules.js';
+import { BANDS } from './arena.js';
 
 const state = { side: loadSide(), lastMoveId: null, takeOver: null, error: '', poll: null, post: null };
 let getGame = () => null;
@@ -159,6 +160,7 @@ async function pollMove() {
 }
 
 const r1 = (n) => Math.round(n * 10) / 10;
+const pt = (p) => ({ x: r1(p.x), y: r1(p.y) });
 
 function snapshot(game) {
   const p = game.prompt;
@@ -178,7 +180,8 @@ function snapshot(game) {
     stats: f.stats,
     stances: game.activeStances(f).map((d) => ({ name: d.name, buildUp: game.buildUp(f, d), nextBuildUp: d.buildUp ? r1(game.nextBuildUp(f, d)) : null, upkeep: r1(game.upkeepRate(f, d)) })),
     windups: f.windups.map((w) => ({ label: w.label, madra: w.madra, lands: r1(w.end), boost: r1(w.boost || 0) })),
-    moving: f.moving && { dir: f.moving.dir < 0 ? 'in' : 'away', arrives: r1(f.moving.end) },
+    at: pt(game.pos(f)),
+    moving: f.moving && { to: pt(f.moving.path[f.moving.path.length - 1]), arrives: r1(f.moving.end) },
   }));
 
   let options = null;
@@ -187,6 +190,11 @@ function snapshot(game) {
     options = game.turnOptions(cur).map((o) => {
       const amount = o.slider ? o.slider.initial : 0;
       const pv = game.preview(cur, o.key, amount);
+      // Moves need a destination: show where heading straight toward or away would take you.
+      const ways = o.point ? Object.fromEntries(['toward', 'away'].map((w) => {
+        const wp = game.preview(cur, o.key, amount, w);
+        return [w, { enabled: wp.enabled, reason: wp.reason, preview: wp.lines.filter(Boolean) }];
+      })) : null;
       return {
         key: o.key,
         label: o.label,
@@ -196,6 +204,7 @@ function snapshot(game) {
         reason: pv.reason,
         warning: pv.warning || null,
         preview: pv.lines.filter(Boolean),
+        point: o.point ? { reach: o.point.reach, ways } : null,
       };
     });
   }
@@ -226,7 +235,10 @@ function snapshot(game) {
     drawOffers: game.fighters.filter((f) => game.drawOffers[f.index]).map((f) => f.name),
     error: state.error,
     time: r1(game.time),
-    range: RANGES[game.distance],
+    range: RANGES[game.band()],
+    gap: r1(game.gap()),
+    lineBlockedBy: game.sight(game.pos(game.fighters[0]), game.pos(game.fighters[1])).blockedBy?.name || null,
+    arena: { name: game.arena.name, width: game.arena.width, height: game.arena.height, bands: { closeUpTo: BANDS[0], midUpTo: BANDS[1] }, obstacles: game.arena.obstacles.map((o) => ({ name: o.name, x: o.x, y: o.y, w: o.w, h: o.h })) },
     prompt: p && { kind: p.kind, fighter: p.fighter != null ? game.fighters[p.fighter].name : null },
     result: game.result && (game.result.draw ? 'draw' : `${game.fighters[game.result.winner].name} wins`),
     fighters,

@@ -14,9 +14,9 @@ Numbers are for a typical fighter in units of their own stage (see stats.md): He
 - **Stances break too,** but take twice the threshold. A hit that big drops every stance you hold.
 - **To-hit:** fast, precise techniques get +1 or +2. Heavy, slow ones get −1.
 - **Some techniques cost extra madra per point of power** (Endless Sword costs 1.5). Their damage and wind-up follow the power; the channel cap limits the madra actually spent.
-- **Best range:** each attack has a best range, and takes −1 to hit for each range band past it.
-- **Range counts when an attack lands.** You can start any attack at any range, including one that will reach only because a move finishes first. One that won't reach is shown with a warning and is wasted if the range doesn't change.
-- **Area attacks don't roll** and deal 0.75× damage for it. They hit everything in range; the defender can block, dodge to cut the damage, or be out of range when they land.
+- **Best range:** each attack has a best range, and takes −1 to hit for each range band past it. Bands are distances on the arena: Close up to 2 m, Mid up to 14 m, Far beyond (battlefield.md).
+- **Range counts when an attack lands.** You can start any attack at any range, including one that will reach only because someone moves first. The line from attacker to target must also be clear of obstacles when it lands. One that won't reach is shown with a warning and is wasted if the range doesn't change.
+- **Area attacks don't roll** and deal 0.75× damage for it. They are centred on the attacker and hit everything in range with a clear line from them; the defender can block, dodge to cut the damage, or be out of range when they land.
 - **Damage types:** physical (strikes and weapon blows), technique (most techniques), and spiritual. Spiritual damage goes to the spirit track instead of health, is reduced by Spirit ÷ 10 instead of Toughness, counts double against interrupt and stance thresholds, and does double damage to constructs.
 - **Disruption** breaks a target's wind-ups and stances without doing damage. Area disruption also disperses their constructs.
 - **Unique effects come out of the damage budget.** For example, ignoring damage reduction costs about 1 damage per point ignored.
@@ -25,13 +25,13 @@ Numbers are for a typical fighter in units of their own stage (see stats.md): He
 - **Forged constructs have no upkeep.** Their limits are their HP and the madra and time they cost to make.
 - **Forging doesn't tie you up.** Starting a construct is quick: your next turn comes soon, and the construct forms over its wind-up while you keep acting. Some constructs build piece by piece (a barrier fills in 5 madra at a time); others are many small constructs Forged one at a time (each Crown star). Interrupting a build stops the unformed part; anything already formed stays.
 - **Constructs can have their own commands.** A technique can have several uses on one card, such as forging stars and dropping them.
-- **Attacking constructs:** a single-target attack can be aimed at an opponent's construct instead of the opponent. It rolls against a flat Defense of 10, with the range penalty counted from where the construct is. Constructs can't dodge, but the owner can reinforce one with madra like a block (−1.5 damage per madra, next turn 1 tick later). Area attacks hit every construct in range automatically. A construct sits at its owner's range unless it says otherwise; Crown stars hang high overhead at Far range. Constructs take no damage reduction, and spiritual hits do double damage to them (so does pure madra; the two don't stack). Barriers are the exception: they can't be targeted, and instead soak hits aimed at their owner.
+- **Attacking constructs:** a single-target attack can be aimed at an opponent's construct instead of the opponent. It rolls against a flat Defense of 10, with the range penalty counted from where the construct is. Constructs can't dodge, but the owner can reinforce one with madra like a block (−1.5 damage per madra, next turn 1 tick later). Area attacks hit every construct in range automatically. A construct sits at its owner's range unless it says otherwise; Crown stars hang high over their owner: always at Far range, and above every obstacle. Constructs take no damage reduction, and spiritual hits do double damage to them (so does pure madra; the two don't stack). Barriers are the exception: they can't be targeted, and instead soak hits aimed at their owner.
 
 ## Templates
 
 Everyone can strike, dodge, block, move, and wait. The rest come from a fighter's Path.
 
-- **Move:** one range band, closer or farther. Takes 3 ticks, shortened by Speed, and the range changes when the move finishes, so attacks that land mid-move still hit.
+- **Move:** walk to any spot on the arena, around obstacles, at 2 m per tick at Speed 100 (time scales by (100 / Speed)², minimum 0.5 ticks). You are partway along the route while you move, so attacks that land mid-move are aimed at where you are then (battlefield.md).
 - **Wait:** pass for as many ticks as you choose.
 
 | Template | Type | Role | Madra | Wind-up | Damage | Notes |

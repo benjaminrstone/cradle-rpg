@@ -4,7 +4,8 @@ export const RANGES = ['Close', 'Mid', 'Far'];
 
 export const TIMING = {
   strikeWindup: 2,      // physical, scaled by Speed
-  move: 3,              // physical, scaled by Speed
+  moveRate: 2,          // metres per tick at Speed 100; physical, so scaled by Speed
+  moveMin: 0.5,         // the shortest a move takes
   dodge: 2,             // physical, scaled by Speed; pushes your next action later
   blockDelay: 1,        // pushes your next action later
   waitDefault: 2,
@@ -42,6 +43,11 @@ export function controlFactor(control) {
 // Speed counts squared, so fast fighters act much more often.
 export function physTime(base, speed) {
   return base * (100 / speed) ** 2;
+}
+
+// Walking a route: time grows with distance, shortened by Speed like any physical action.
+export function moveTime(metres, speed) {
+  return Math.max(TIMING.moveMin, physTime(metres / TIMING.moveRate, speed));
 }
 
 export function speedMod(defenderSpeed, attackerSpeed) {

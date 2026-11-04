@@ -49,13 +49,24 @@ def fighter_line(f):
     for p in f.get("windups", []):
         boost = f", boosted +{p['boost']}" if p.get("boost") else ""
         lines.append(f"    winding up: {p['label']} ({p['madra']} madra{boost}), lands t={p['lands']}")
+    if f.get("at"):
+        lines.append(f"    at ({f['at']['x']}, {f['at']['y']})")
     if f["moving"]:
-        lines.append(f"    moving {f['moving']['dir']}, arrives t={f['moving']['arrives']}")
+        to = f["moving"].get("to") or {}
+        lines.append(f"    moving to ({to.get('x')}, {to.get('y')}), arrives t={f['moving']['arrives']}")
     return "\n".join(lines)
 
 
 def describe(s):
-    out = [f"=== t={s['time']}  range {s['range']}  decision {s['decision']}  (Claude plays {s['claudeSide']}) ==="]
+    out = [f"=== t={s['time']}  range {s['range']} ({s.get('gap', '?')} m)  decision {s['decision']}  (Claude plays {s['claudeSide']}) ==="]
+    ar = s.get("arena")
+    if ar:
+        bd = ar.get("bands") or {}
+        b = [bd.get("closeUpTo", 2), bd.get("midUpTo", 14)]
+        obs = ", ".join(f"{o['name']} x {o['x']}-{o['x'] + o['w']}, y {o['y']}-{o['y'] + o['h']}" for o in ar["obstacles"])
+        out.append(f"Arena {ar['name']}: {ar['width']} x {ar['height']} m (x right, y down). Close up to {b[0]} m, Mid up to {b[1]} m, Far beyond. Obstacles: {obs}")
+        if s.get("lineBlockedBy"):
+            out.append(f"The line between the fighters is blocked by a {s['lineBlockedBy']}: attacks can't land through it.")
     if s.get("codeVersion") != code_version(REMOTE):
         out.append("WARNING: the app tab is running old code; ask the user to reload (Ctrl+Shift+R).")
     if s.get("result"):
@@ -80,11 +91,18 @@ def describe(s):
                 sl = o["slider"]
                 slider = f" [{sl['label']} {sl['min']}-{sl['max']}, preview at {sl['previewAt']}]"
             status = f"  (unavailable: {o['reason']})" if not o["enabled"] else f"  (warning: {o['warning']})" if o.get("warning") else ""
+            if o.get("point") and not o["enabled"]:
+                status = "  (give it a destination)"
             out.append(f"  {o['key']}: {o['label']}{slider}{status}")
             if o.get("targets"):
                 out.append("      can target: " + ", ".join(f"@{t['id']} {t['label']}" for t in o["targets"]))
             for line in o["preview"]:
                 out.append(f"      {line}")
+            if o.get("point"):
+                out.append(f"      destination: @x:y (e.g. {o['key']} @12:8), or @toward / @away")
+                for way, w in (o["point"].get("ways") or {}).items():
+                    status = "" if w["enabled"] else f" (unavailable: {w['reason']})"
+                    out.append(f"      @{way}{status}: " + " / ".join(w["preview"][:2]))
     if s.get("reaction"):
         r = s["reaction"]
         a = r["attack"]

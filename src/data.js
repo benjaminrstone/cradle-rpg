@@ -33,7 +33,7 @@ export const STAT_GROUPS = [
 // Oathsign is one technique with many uses; they share a card.
 const OATHSIGN = {
   card: 'oathsign', cardTitle: 'Oathsign', cardType: 'Forger',
-  cardDesc: 'Script circles of force madra, Forged for whatever the fight needs: a shield, rings for Speed and heavier blows, a ring that flings you a range band, and a seal that breaks the opponent’s techniques.',
+  cardDesc: 'Script circles of force madra, Forged for whatever the fight needs: a shield, rings for Speed and heavier blows, a ring that flings you across the field, and a seal that breaks the opponent’s techniques.',
 };
 
 export const PATHS = {
@@ -58,7 +58,7 @@ export const PATHS = {
       {
         id: 'voidDragonsDance', name: "Void Dragon's Dance", kind: 'attack', type: 'Ruler',
         divisor: 2, toHit: 0, ranges: [0, 1], area: true, boostPerMadra: 1, ruler: true,
-        desc: 'Finisher: a long build-up, then a wide blast. Ruler: no channel cap, and you act again soon while it builds. Area attack, no roll; hits Close and Mid. +1 damage per Black Flame madra you spend while it winds up.',
+        desc: 'Finisher: a long build-up, then a wide blast. Ruler: no channel cap, and you act again soon while it builds. Area attack, no roll; hits everything within Mid range of you that you can see. +1 damage per Black Flame madra you spend while it winds up.',
       },
     ],
   },
@@ -73,7 +73,7 @@ export const PATHS = {
       {
         id: 'endlessSword', name: 'Endless Sword', kind: 'attack', type: 'Striker / Ruler',
         divisor: 6, costMult: 1.5, toHit: 0, ranges: [0, 1], area: true, bladeHits: true,
-        desc: 'A fast area attack, no roll: slashes everything at close and mid range, constructs included. One extra hit per other blade close to the target. Wind-up madra ÷ 6, but it costs 1.5 madra per point of power.',
+        desc: 'A fast area attack, no roll: slashes everything within Mid range of you that you can see, constructs included. One extra hit per other blade close to the target. Wind-up madra ÷ 6, but it costs 1.5 madra per point of power.',
       },
       {
         id: 'ripplingSword', name: 'Rippling Sword', kind: 'attack', type: 'Striker',
@@ -111,8 +111,8 @@ export const PATHS = {
       {
         id: 'crown', name: 'Crown of the Hollow King', label: 'Forge a star', card: 'crown', kind: 'forge', type: 'Forger',
         divisor: 2,
-        cardDesc: 'Forge stars high overhead at Far range, then drop them when the timing is right. Each star is its own construct with HP equal to its madra.',
-        desc: 'Forge one star for the Crown of the Hollow King, high overhead at Far range. The madra you put in sets its size; it takes madra ÷ 2 ticks to form, but your next turn comes after 1 tick. Each star is its own construct with HP equal to its madra.',
+        cardDesc: 'Forge stars high over your head (always Far), then drop them when the timing is right. Each star is its own construct with HP equal to its madra.',
+        desc: 'Forge one star for the Crown of the Hollow King, high over your head: always Far, and above every obstacle. The madra you put in sets its size; it takes madra ÷ 2 ticks to form, but your next turn comes after 1 tick. Each star is its own construct with HP equal to its madra.',
       },
       {
         id: 'dropStars', name: 'Crown of the Hollow King', label: 'Drop stars', card: 'crown', kind: 'command', type: 'Forger',
@@ -156,7 +156,7 @@ export const PATHS = {
       {
         id: 'launch', name: 'Oathsign: Launch', label: 'Launch', ...OATHSIGN, kind: 'launch', type: 'Forger',
         fixedCost: 4, travel: 0.5, recovery: 1,
-        desc: 'A ring flings you one range band in 0.5 ticks; your next turn comes 1 tick after you land.',
+        desc: 'A ring flings you up to 7 m in a straight line in 0.5 ticks; your next turn comes 1 tick after you land. Click the field to choose where.',
       },
       {
         id: 'seal', name: 'Oathsign: Seal', label: 'Seal', ...OATHSIGN, kind: 'disrupt', type: 'Forger',

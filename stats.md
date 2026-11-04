@@ -85,7 +85,7 @@ Body and Spirit steps are fractions of the stage's typical value, so they scale 
 - **Range penalty:** −1 for each range band past the attack's best range.
 - **Speed modifier:** 3 × log₂(defender's Speed ÷ attacker's Speed), rounded to the nearest whole number. About +1 for every 25% faster the defender is, −1 for every 20% slower: +2 one stage up, +3 across a realm jump.
 - **No automatic hits on a roll.** A big enough gap can make a fighter unhittable by rolled attacks.
-- **Area attacks don't roll.** They hit everything in range. The defender can block, dodge to cut the damage, or be out of range when the attack lands.
+- **Area attacks don't roll.** They hit everything in range of the attacker with a clear line from them. The defender can block, dodge to cut the damage, or be out of range when the attack lands.
 - **Dodging:** a dodge adds +2 to Defense plus the speed modifier a second time (minimum +0). It's a physical action, so its time cost also shrinks with Speed. Faster fighters dodge both better and more cheaply. Against an area attack, a dodge can't avoid it but cuts the damage by 15% per point of dodge bonus, up to 90%. Against an attack with several hits, the dodge tapers: full bonus on the first hit, 1 less on each hit after it, down to +0.
 - **Dodge and block together:** a defender can dodge and block the same attack, paying both the dodge's time and the block's madra.
 - **Damage reduction:** Toughness against physical and technique hits; Spirit / 10 against spiritual hits. Comes off every hit. Resistance to one element doesn't help against another.
@@ -93,6 +93,6 @@ Body and Spirit steps are fractions of the stage's typical value, so they scale 
 - **Technique damage:** about 1.5–2 damage per point of madra spent.
 - **Interrupts:** a hit interrupts if, after damage reduction, it deals at least 1.6 × Control% of the defender's max Health (8 at Control 5). Spiritual hits count double. It breaks everything the defender is winding up, except plain strikes; an enforced strike drops to a plain strike.
 - **Breaking stances:** stances are held more firmly. A hit of at least twice the interrupt threshold (16 at Control 5) breaks every stance the defender holds: they drop and can't be raised again until the re-raise delay passes.
-- **Physical action time:** base time × (100 / Speed)². A strike's base time is 2 ticks, a move's 3 and a dodge's 2.
+- **Physical action time:** base time × (100 / Speed)². A strike's base time is 2 ticks and a dodge's 2; a move's is 1 tick per 2 m walked (battlefield.md).
 - **Technique wind-up:** 3% shorter per point of Control.
 - **Upkeep and re-raise delay:** 5% lower per point of Control.

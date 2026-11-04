@@ -1,6 +1,7 @@
 // Fight engine: one shared initiative queue, wind-ups, reactions, upkeep, interrupts,
 // Forged constructs, and three damage types (physical, technique, spiritual).
 import * as R from './rules.js';
+import * as A from './arena.js';
 import { PATHS } from './data.js';
 
 const EPS = 1e-9;
@@ -18,7 +19,7 @@ export class Game {
   constructor(defs, rng = Math.random) {
     this.rng = rng;
     this.time = 0;
-    this.distance = 1;
+    this.arena = A.ARENA;
     this.events = [];
     this.log = [];
     this.nextId = 1;
@@ -38,11 +39,12 @@ export class Game {
       stances: {},        // id -> { raisedAt }
       lockedUntil: {},    // id -> time a dropped stance can be raised again
       windups: [],        // own wind-ups in progress; a hit over the threshold breaks them all
-      moving: null,       // move in progress: { end, dir }
-      constructs: [],     // Forged constructs: { id, kind, name, hp, maxHp, madra?, range? }
+      pos: { ...this.arena.starts[i] }, // where the fighter stands (the start of a move in progress)
+      moving: null,       // move in progress: { start, end, from, path: [points after from] }
+      constructs: [],     // Forged constructs: { id, kind, name, hp, maxHp, madra? }
       seen: [],           // technique ids this fighter has used, so the opponent can look them up
     }));
-    this.addLog(`The fight begins at ${R.RANGES[this.distance]} range.`, 'system');
+    this.addLog(`The fight begins in the ${this.arena.name}, ${fmt(this.gap())} m apart (${R.RANGES[this.band()]} range).`, 'system');
     this.advance();
   }
 
@@ -58,7 +60,21 @@ export class Game {
   // health, madra, stances, wind-ups and the queue carry over.
   static restore(state, defs, rng = Math.random) {
     const g = Object.create(Game.prototype);
-    Object.assign(g, state, { rng });
+    const { distance, ...rest } = state;
+    Object.assign(g, rest, { rng });
+    // Fights saved on the old range strip, or on an older arena layout: stand the fighters on
+    // the current arena's start line (as far apart as the band they were at, or as they were),
+    // and drop any move in progress.
+    if (!g.arena || JSON.stringify(g.arena) !== JSON.stringify(A.ARENA)) {
+      const at = (f) => (f.moving ? A.along(f.moving.from, f.moving.path, A.pathLength(f.moving.from, f.moving.path)
+        * Math.min(1, Math.max(0, (g.time - f.moving.start) / Math.max(EPS, f.moving.end - f.moving.start)))) : f.pos);
+      const gap = g.arena ? Math.min(30, A.dist(at(state.fighters[0]), at(state.fighters[1]))) : [1.5, 8, 16][distance ?? 1];
+      g.arena = A.ARENA;
+      const [a, b] = g.arena.starts;
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      state.fighters.forEach((f, i) => { f.pos = { x: mid.x + (i ? 1 : -1) * gap / 2, y: mid.y }; f.moving = null; });
+      g.events = g.events.filter((e) => e.action.kind !== 'move');
+    }
     // Fights saved before history was kept: rebuild an approximate one from the log.
     if (!g.history) {
       const typeOf = (t) => (/winds up|begins|starts moving|to move|waits|drops /.test(t) ? 'turn'
@@ -167,32 +183,78 @@ export class Game {
   stars(f) { return f.constructs.filter((c) => c.kind === 'star'); }
   rings(f) { return f.constructs.filter((c) => c.kind === 'ring'); }
 
-  // Where a construct is, for range checks. The Crown hangs high overhead at Far range;
-  // barriers sit on their owner, at the fighters' current distance.
-  constructRange(c) { return c.range ?? this.distance; }
-
-  // The range at time t, counting moves already underway (a move takes effect when it ends).
-  distanceAt(t) {
-    let d = this.distance;
-    const moves = this.fighters.map((x) => x.moving).filter((m) => m && m.end <= t + EPS).sort((a, b) => a.end - b.end);
-    for (const m of moves) d = Math.min(2, Math.max(0, d + m.dir));
-    return d;
+  // ---------- positions ----------
+  // Where a fighter is at time t, partway along a move in progress.
+  pos(f, t = this.time) {
+    const m = f.moving;
+    if (!m) return f.pos;
+    const k = Math.min(1, Math.max(0, (t - m.start) / Math.max(EPS, m.end - m.start)));
+    return A.along(m.from, m.path, k * A.pathLength(m.from, m.path));
   }
 
-  // Range check for an attack: what counts is the range when it lands. An attack that won't
-  // reach can still be chosen; it just gets a warning.
-  rangeGate(ranges, landAt, shortReason) {
-    const later = this.distanceAt(landAt);
-    const ok = ranges.includes(later);
-    const changes = later !== this.distance;
+  gap(t = this.time) { return A.dist(this.pos(this.fighters[0], t), this.pos(this.fighters[1], t)); }
+  band(t = this.time) { return A.bandOf(this.gap(t)); }
+
+  // Where a construct is. Crown stars hang high over their owner (always Far, over every obstacle);
+  // barriers and rings sit on their owner.
+  constructPos(owner, c, t = this.time) {
+    const p = this.pos(owner, t);
+    return c.kind === 'star' ? { x: p.x, y: p.y, z: A.STAR_HEIGHT } : p;
+  }
+
+  ownerOf(c) { return this.fighters.find((f) => f.constructs.includes(c)); }
+
+  // From one point to another: the distance, its range band, and the obstacle in the way, if any.
+  sight(from, to) {
+    const dist = A.dist(from, to);
+    return { dist, band: A.bandOf(dist), blockedBy: A.blocker(this.arena, from, to) };
+  }
+
+  // Can something with these ranges get from `from` to `to`? Overhead attacks (Crown stars) always can.
+  reaches(prof, from, to) {
+    if (prof.overhead) return true;
+    const s = this.sight(from, to);
+    return prof.ranges.includes(s.band) && !s.blockedBy;
+  }
+
+  // Range check for an attack: what counts is where both fighters are when it lands. An attack
+  // that won't reach can still be chosen; it just gets a warning.
+  rangeGate(f, ranges, landAt, shortReason) {
+    const o = this.opponent(f);
+    const now = this.sight(this.pos(f), this.pos(o));
+    const later = this.sight(this.pos(f, landAt), this.pos(o, landAt));
+    const ok = ranges.includes(later.band);
+    const changes = later.band !== now.band;
+    let warning = null;
+    if (!ok) warning = `${changes ? `Out of range when it lands (${R.RANGES[later.band]} by then)` : shortReason}: wasted unless the range changes`;
+    else if (later.blockedBy) warning = `A ${later.blockedBy.name} is in the way${landAt > this.time + EPS && now.blockedBy !== later.blockedBy ? ' when it lands' : ''}: wasted unless someone moves`;
     return {
-      warning: ok ? null : `${changes ? `Out of range when it lands (${R.RANGES[later]} by then)` : shortReason}: wasted unless the range changes`,
-      note: changes && ok ? `Range will be ${R.RANGES[later]} when it lands (t=${fmt(landAt)})` : null,
+      warning,
+      note: changes && ok ? `Range will be ${R.RANGES[later.band]} when it lands (t=${fmt(landAt)})` : null,
     };
   }
 
-  constructGate(ranges, c, shortReason) {
-    return { warning: ranges.includes(this.constructRange(c)) ? null : `${shortReason}: can't reach ${c.name}`, note: null };
+  constructGate(f, ranges, c, shortReason) {
+    const s = this.sight(this.pos(f), this.constructPos(this.ownerOf(c), c));
+    const warning = !ranges.includes(s.band) ? `${shortReason}: can't reach ${c.name}`
+      : s.blockedBy ? `A ${s.blockedBy.name} is in the way of ${c.name}` : null;
+    return { warning, note: null };
+  }
+
+  // The route a move would take: walking (around obstacles) or a straight flight up to `reach`.
+  // `to` is a point ("x:y") or "toward" / "away" (from the opponent).
+  planMove(f, to, { reach = Infinity, flight = false } = {}) {
+    const from = this.pos(f);
+    const o = this.opponent(f);
+    const dest = to === 'toward' || to === 'away' ? A.spotFrom(this.arena, from, this.pos(o), to, reach, flight) : typeof to === 'string' ? A.parsePoint(to) : to;
+    if (!dest) return { error: 'Choose where to go: click the field' };
+    if (!A.standable(this.arena, dest)) return { error: "Can't stand there", dest };
+    if (A.dist(from, dest) < 0.05) return { error: 'Already there', dest };
+    const path = flight ? A.straight(this.arena, from, dest) : A.route(this.arena, from, dest);
+    if (!path) return { error: flight ? 'An obstacle is in the way of a straight flight' : 'No way through', dest };
+    const length = A.pathLength(from, path);
+    if (length > reach + EPS) return { error: `Too far: it reaches ${fmt(reach)} m (that's ${fmt(length)} m)`, dest };
+    return { from, path, dest, length };
   }
 
   // ---------- log ----------
@@ -289,6 +351,7 @@ export class Game {
       hits: 1,
       madra,
       fromConstruct: true,
+      overhead: true, // they come down from above: any range, over every obstacle
       ownerName: owner.name,
       pure: !!this.path(owner).pureMadra,
     };
@@ -297,7 +360,7 @@ export class Game {
   hitsAgainst(attacker, defender, profile) {
     if (!profile.bladeHits) return profile.hits;
     let hits = 1;
-    if (this.hasTrait(attacker, 'swordArms') && this.distance === 0) hits += 1;
+    if (this.hasTrait(attacker, 'swordArms') && this.band() === 0) hits += 1;
     if (defender.weapon && defender.weapon.blade) hits += 1;
     return hits;
   }
@@ -315,8 +378,9 @@ export class Game {
     return d;
   }
 
-  rangePenalty(prof) {
-    return prof.area ? 0 : R.rangePenalty(this.distance, prof.bestRange);
+  // Range penalty between the fighters (or at a given band, for a construct).
+  rangePenalty(prof, band = this.band()) {
+    return prof.area ? 0 : R.rangePenalty(band, prof.bestRange);
   }
 
   // Area attacks don't roll, so they always hit.
@@ -328,7 +392,7 @@ export class Game {
 
   constructHitChance(attacker, prof, c) {
     if (prof.area) return 1;
-    const pen = R.rangePenalty(this.constructRange(c), prof.bestRange);
+    const pen = R.rangePenalty(this.sight(this.pos(attacker), this.constructPos(this.ownerOf(c), c)).band, prof.bestRange);
     return R.chanceAtLeast(CONSTRUCT_DEFENSE - attacker.stats.precision - prof.toHit + pen);
   }
 
@@ -386,8 +450,7 @@ export class Game {
     const o = this.opponent(f);
     const opts = [
       { key: 'strike', label: 'Strike', group: 'basic' },
-      { key: 'moveIn', label: 'Move closer', group: 'basic' },
-      { key: 'moveOut', label: 'Move away', group: 'basic' },
+      { key: 'move', label: 'Move', group: 'basic', point: { reach: null } },
       {
         key: 'wait', label: 'Wait', group: 'basic',
         slider: { label: 'Ticks', min: R.TIMING.waitMin, max: R.TIMING.waitMax, step: 0.5, initial: R.TIMING.waitDefault },
@@ -396,8 +459,9 @@ export class Game {
     // Single-target attacks can be aimed at the opponent or one of their (non-barrier) constructs
     // that the attack can reach.
     const withTargets = (opt, ranges) => {
-      const targets = o.constructs.filter((c) => c.kind !== 'barrier' && ranges.includes(this.constructRange(c)))
-        .map((c) => ({ id: c.id, label: `${o.name}'s ${c.name} (${fmt(c.hp)} HP, ${R.RANGES[this.constructRange(c)]})` }));
+      const where = (c) => this.sight(this.pos(f), this.constructPos(o, c));
+      const targets = o.constructs.filter((c) => c.kind !== 'barrier' && ranges.includes(where(c).band) && !where(c).blockedBy)
+        .map((c) => ({ id: c.id, label: `${o.name}'s ${c.name} (${fmt(c.hp)} HP, ${c.kind === 'star' ? 'overhead' : R.RANGES[where(c).band]})` }));
       return targets.length ? { ...opt, targets: [{ id: '', label: o.name }, ...targets] } : opt;
     };
     opts[0] = withTargets(opts[0], [0]);
@@ -409,9 +473,7 @@ export class Game {
       }
       const cardInfo = { card: t.card, cardTitle: t.cardTitle || t.name, cardType: t.cardType, cardDesc: t.cardDesc };
       if (t.kind === 'launch') {
-        const name = t.label || t.name;
-        opts.push({ key: `${t.id}:in`, label: `${name} in`, group: 'path', type: t.type, desc: t.desc, ...cardInfo });
-        opts.push({ key: `${t.id}:out`, label: `${name} away`, group: 'path', type: t.type, desc: t.desc, ...cardInfo });
+        opts.push({ key: t.id, label: t.label || t.name, group: 'path', type: t.type, desc: t.desc, point: { reach: this.launchReach(t) }, ...cardInfo });
         continue;
       }
       let opt = { key: t.id, label: t.label || t.name, group: 'path', type: t.type, desc: t.desc, ...cardInfo };
@@ -453,21 +515,16 @@ export class Game {
     if (key === 'strike') {
       const prof = this.attackProfile(f, 'strike');
       const w = R.physTime(R.TIMING.strikeWindup, spd);
-      const gate = tc ? this.constructGate([0], tc, 'Close range only') : this.rangeGate([0], this.time + w, 'Close range only');
+      const gate = tc ? this.constructGate(f, [0], tc, 'Close range only') : this.rangeGate(f, [0], this.time + w, 'Close range only');
       const lines = [`Wind-up ${fmt(w)} · next turn in ${fmt(w)}`, attackLines(prof, prof.hits)];
       if (gate.note) lines.push(gate.note);
       return { enabled: true, reason: '', warning: gate.warning, lines };
     }
-    if (key === 'moveIn' || key === 'moveOut') {
-      // Like attacks, a move checks the range when it finishes, counting the opponent's move underway.
-      const w = R.physTime(R.TIMING.move, spd);
-      const nd = this.distanceAt(this.time + w - EPS) + (key === 'moveIn' ? -1 : 1);
-      const ok = nd >= 0 && nd <= 2;
-      return {
-        enabled: ok,
-        reason: ok ? '' : (key === 'moveIn' ? 'Already at close range' : 'Already at far range'),
-        lines: [ok ? `To ${R.RANGES[nd]} range · arrives t=${fmt(this.time + w)} (next turn then)` : '', ok ? 'Attacks that land before you arrive still hit' : ''],
-      };
+    if (key === 'move') {
+      const plan = this.planMove(f, target);
+      if (plan.error) return { enabled: false, reason: plan.error, lines: [`${fmt(R.TIMING.moveRate * (spd / 100) ** 2)} m per tick at your Speed, around obstacles`] };
+      const w = R.moveTime(plan.length, spd);
+      return { enabled: true, reason: '', lines: this.moveLines(f, plan, w, w) };
     }
     if (key === 'wait') {
       return { enabled: true, reason: '', lines: [`Next turn in ${fmt(clampWait(amount))}`] };
@@ -494,14 +551,14 @@ export class Game {
       };
     }
     if (t.kind === 'launch') {
-      const dir = key.endsWith(':in') ? -1 : 1;
-      const nd = this.distanceAt(this.time + t.travel - EPS) + dir;
-      const ok = nd >= 0 && nd <= 2;
+      const plan = this.planMove(f, target, { reach: this.launchReach(t), flight: true });
       const enough = f.madra >= t.fixedCost;
+      const lines = [`Costs ${t.fixedCost} madra · flies up to ${fmt(this.launchReach(t))} m in a straight line in ${fmt(t.travel)} ticks`];
+      if (plan.error) return { enabled: false, reason: plan.error, lines };
       return {
-        enabled: ok && enough,
-        reason: !ok ? (dir < 0 ? 'Already at close range' : 'Already at far range') : enough ? '' : 'Not enough madra',
-        lines: [`Costs ${t.fixedCost} madra · to ${ok ? R.RANGES[nd] : '—'} range, arrives t=${fmt(this.time + t.travel)} · next turn in ${fmt(t.travel + t.recovery)}`],
+        enabled: enough,
+        reason: enough ? '' : 'Not enough madra',
+        lines: [lines[0], ...this.moveLines(f, plan, t.travel, t.travel + t.recovery)],
       };
     }
     if (t.kind === 'command') {
@@ -524,7 +581,7 @@ export class Game {
       if (max < t.minMadra) return { enabled: false, reason: 'Not enough madra', lines: [] };
       const madra = Math.min(Math.max(t.minMadra, Math.round(amount)), max);
       const w = this.twind(t, R.nominalWindup(madra, t.divisor), f.stats.control);
-      const gate = this.rangeGate(t.ranges, this.time + w, 'Out of range (Close)');
+      const gate = this.rangeGate(f, t.ranges, this.time + w, 'Out of range (Close)');
       const targets = this.pulseTargets(o, madra, t.ranges);
       const lines = [
         `Wind-up ${fmt(w)} (lands t=${fmt(this.time + w)}) · next turn in ${fmt(w)}`,
@@ -539,7 +596,7 @@ export class Game {
       const enough = f.madra >= t.fixedCost;
       const w = this.twind(t, t.windup, f.stats.control);
       const rangeText = `Out of range (${t.ranges.map((r) => R.RANGES[r]).join('/')})`;
-      const gate = this.rangeGate(t.ranges, this.time + w, rangeText);
+      const gate = this.rangeGate(f, t.ranges, this.time + w, rangeText);
       const prof = this.disruptProfile(f, t);
       const lines = [`Costs ${t.fixedCost} madra · wind-up ${fmt(w)} (lands t=${fmt(this.time + w)}) · next turn in ${fmt(w)}`];
       lines.push(t.area
@@ -577,7 +634,7 @@ export class Game {
         enabled: true, reason: '',
         lines: [
           `Star forms at t=${fmt(this.time + w)} (${fmt(w)} ticks) · next turn in ${fmt(STAR.forgeRecovery)} (keep acting while it forms)`,
-          `When dropped: ${fmt(sp.damage)} spiritual (${this.hitResult(f, o, sp).dmg} after ${o.name}'s reduction) · star HP ${fmt(madra * (t.sizeMult || 1))}, at Far range`,
+          `When dropped: ${fmt(sp.damage)} spiritual (${this.hitResult(f, o, sp).dmg} after ${o.name}'s reduction) · star HP ${fmt(madra * (t.sizeMult || 1))}, high overhead (Far)`,
         ],
       };
     }
@@ -590,7 +647,7 @@ export class Game {
 
     const prof = this.attackProfile(f, key, madra);
     const rangeText = `Out of range (${prof.ranges.map((r) => R.RANGES[r]).join('/')})`;
-    const gate = tc ? this.constructGate(prof.ranges, tc, rangeText) : this.rangeGate(prof.ranges, this.time + w, rangeText);
+    const gate = tc ? this.constructGate(f, prof.ranges, tc, rangeText) : this.rangeGate(f, prof.ranges, this.time + w, rangeText);
     const hits = tc ? 1 : this.hitsAgainst(f, o, prof);
     const lines = [timing, attackLines(prof, hits)];
     if (gate.note) lines.push(gate.note);
@@ -600,9 +657,24 @@ export class Game {
     return { enabled: true, reason: '', warning: gate.warning, lines };
   }
 
+  launchReach(t) { return t.reach || A.LAUNCH_REACH; }
+
+  // Preview lines for a move: where to, how far, when you arrive, and the range then.
+  moveLines(f, plan, travel, nextIn) {
+    const o = this.opponent(f);
+    const arrive = this.time + travel;
+    const gap = A.dist(plan.dest, this.pos(o, arrive));
+    return [
+      `To (${fmt(plan.dest.x)}, ${fmt(plan.dest.y)}): ${fmt(plan.length)} m${plan.path.length > 1 ? ' around obstacles' : ''} · arrives t=${fmt(arrive)} · next turn ${nextIn > travel + EPS ? `in ${fmt(nextIn)}` : 'then'}`,
+      `${o.name} will be ${fmt(gap)} m away (${R.RANGES[A.bandOf(gap)]})${o.moving ? ` counting their move` : ''}`,
+      'Attacks that land while you move are aimed at where you are by then',
+    ];
+  }
+
   // Madra Pulse: what it would cancel on f at a given strength (madra, less blocks). It cancels
-  // wind-ups, stances and constructs (in range) that cost at most half its strength.
+  // wind-ups, stances and constructs (in range of the opponent) that cost at most half its strength.
   pulseTargets(f, strength, ranges) {
+    const from = this.pos(this.opponent(f));
     const limit = strength / 2 + EPS;
     const out = [];
     for (const w of f.windups) {
@@ -612,7 +684,7 @@ export class Game {
     for (const s of this.activeStances(f)) if (s.raiseCost <= limit) out.push({ kind: 'stance', ref: s, name: s.name, cost: s.raiseCost });
     for (const c of f.constructs) {
       const cost = c.kind === 'barrier' ? c.hp / 2 : c.madra;
-      if (ranges.includes(this.constructRange(c)) && cost <= limit) out.push({ kind: 'construct', ref: c, name: c.name, cost });
+      if (this.reaches({ ranges }, from, this.constructPos(f, c)) && cost <= limit) out.push({ kind: 'construct', ref: c, name: c.name, cost });
     }
     return out;
   }
@@ -680,10 +752,12 @@ export class Game {
       hitDelta(prof, prof.hits);
       return out;
     }
-    if (key === 'moveIn' || key === 'moveOut') {
-      const w = R.physTime(R.TIMING.move, spd);
-      q(this.time + w, `arrives at ${R.RANGES[this.distance + (key === 'moveIn' ? -1 : 1)]}`, 'move');
+    if (key === 'move') {
+      const plan = this.planMove(f, target);
+      const w = R.moveTime(plan.length, spd);
+      q(this.time + w, `arrives (${fmt(plan.length)} m)`, 'move');
       nextTurn(this.time + w);
+      out.path = { who: f.index, from: plan.from, path: plan.path };
       return out;
     }
     if (key === 'wait') {
@@ -701,9 +775,10 @@ export class Game {
     }
     if (t.kind === 'launch') {
       spendM(t.fixedCost);
-      const dir = key.endsWith(':in') ? -1 : 1;
-      q(this.time + t.travel, `lands at ${R.RANGES[this.distance + dir]}`, 'move');
+      const plan = this.planMove(f, target, { reach: this.launchReach(t), flight: true });
+      q(this.time + t.travel, `lands (${fmt(plan.length)} m)`, 'move');
       nextTurn(this.time + t.travel + t.recovery);
+      out.path = { who: f.index, from: plan.from, path: plan.path };
       return out;
     }
     if (t.kind === 'command') {
@@ -894,7 +969,8 @@ export class Game {
     const f = this.current();
     if (!f || this.prompt.kind !== 'turn') return;
     const o = this.opponent(f);
-    if (target && !o.constructs.some((c) => c.id === target)) target = '';
+    const pointed = key === 'move' || (this.tech(f, key) || {}).kind === 'launch';
+    if (target && !pointed && !o.constructs.some((c) => c.id === target)) target = '';
     const pv = this.preview(f, key, amount, target);
     if (!pv.enabled) return;
     const spd = this.speed(f);
@@ -906,25 +982,26 @@ export class Game {
       this.addLog(`${f.name} drops ${this.tech(f, id).name}.`, '', f.index);
       return; // free action: still their turn
     }
-    const what = key === 'strike' ? 'strikes' : key === 'moveIn' ? 'moves in' : key === 'moveOut' ? 'moves away'
+    const what = key === 'strike' ? 'strikes' : key === 'move' ? 'moves'
       : key === 'wait' ? 'waits' : (this.tech(f, key) || {}).label || (this.tech(f, key) || {}).name || key;
     this.history.push({ key: `turn:${f.index}:${Math.round(f.nextTurn * 1000)}`, time: this.time, label: `${f.name}: ${what}`, who: f.index, kind: 'turn', type: 'turn' });
 
-    if (!['strike', 'moveIn', 'moveOut', 'wait'].includes(key)) {
+    if (!['strike', 'move', 'wait'].includes(key)) {
       const id = key.split(':')[0];
       f.seen = f.seen || [];
       if (!f.seen.includes(id)) f.seen.push(id);
     }
 
-    const aimed = target ? ` at ${o.name}'s ${o.constructs.find((c) => c.id === target).name}` : '';
+    const aimed = target && !pointed ? ` at ${o.name}'s ${o.constructs.find((c) => c.id === target).name}` : '';
     if (key === 'strike') {
       const prof = { ...this.attackProfile(f, 'strike'), target };
       const w = R.physTime(R.TIMING.strikeWindup, spd);
       this.startWindup(f, w, { kind: 'attack', profile: prof }, 0);
       f.nextTurn = this.time + R.physTime(R.TIMING.strikeWindup, spd);
       this.addLog(`${f.name} winds up a strike${aimed}.`, '', f.index);
-    } else if (key === 'moveIn' || key === 'moveOut') {
-      this.startMove(f, key === 'moveIn' ? -1 : 1, R.physTime(R.TIMING.move, spd), 0);
+    } else if (key === 'move') {
+      const plan = this.planMove(f, target);
+      this.startMove(f, plan, R.moveTime(plan.length, spd), 0);
     } else if (key === 'wait') {
       const t = clampWait(amount);
       f.nextTurn = this.time + t;
@@ -940,7 +1017,7 @@ export class Game {
         this.addLog(`${f.name} begins raising ${t.name} (${t.raiseCost} madra).`, '', f.index);
       } else if (t.kind === 'launch') {
         this.spend(f, t.fixedCost, burn);
-        this.startMove(f, key.endsWith(':in') ? -1 : 1, t.travel, t.recovery, t.name);
+        this.startMove(f, this.planMove(f, target, { reach: this.launchReach(t), flight: true }), t.travel, t.recovery, t.name);
       } else if (t.kind === 'command') {
         const stars = this.stars(f).sort((a, b) => b.madra - a.madra);
         const n = Math.min(Math.max(1, Math.round(amount) || stars.length), stars.length);
@@ -996,12 +1073,14 @@ export class Game {
     this.advance();
   }
 
-  startMove(f, dir, travel, recovery, via = '') {
-    const ev = { id: this.nextId++, time: this.time + travel, type: 'resolve', actor: f.index, action: { kind: 'move', dir } };
+  startMove(f, plan, travel, recovery, via = '') {
+    const ev = { id: this.nextId++, time: this.time + travel, type: 'resolve', actor: f.index, action: { kind: 'move', to: plan.dest, via } };
     this.events.push(ev);
-    f.moving = { start: this.time, end: ev.time, dir };
+    f.pos = { ...plan.from };
+    f.moving = { start: this.time, end: ev.time, from: { ...plan.from }, path: plan.path.map((p) => ({ x: p.x, y: p.y })) };
     f.nextTurn = ev.time + recovery;
-    this.addLog(`${f.name} ${via ? `uses ${via} to move` : 'starts moving'} ${dir < 0 ? 'in' : 'away'} (arrives t=${fmt(ev.time)}).`, '', f.index);
+    const where = `(${fmt(plan.dest.x)}, ${fmt(plan.dest.y)})`;
+    this.addLog(`${f.name} ${via ? `uses ${via} to fly` : 'moves'} ${fmt(plan.length)} m to ${where} (arrives t=${fmt(ev.time)}).`, '', f.index);
   }
 
   // A barrier builds in pieces of 5 madra spread over the wind-up. Each piece joins the
@@ -1111,9 +1190,8 @@ export class Game {
     this.advance();
   }
 
-  rollHit(att, defense, prof) {
+  rollHit(att, defense, prof, pen = this.rangePenalty(prof)) {
     const [d1, d2] = R.roll2d6(this.rng);
-    const pen = this.rangePenalty(prof);
     const total = d1 + d2 + att.stats.precision + prof.toHit - pen;
     const text = `2d6 ${d1}+${d2} +${att.stats.precision}${prof.toHit ? ` +${prof.toHit}` : ''}${pen ? ` −${pen} range` : ''} = ${total} vs ${defense}`;
     return { hit: total >= defense, text };
@@ -1147,7 +1225,7 @@ export class Game {
     // Area attacks also hit the defender's constructs in range (barriers only soak).
     if (prof.area && prof.effect !== 'disrupt') {
       for (const c of [...def.constructs]) {
-        if (c.kind === 'barrier' || !prof.ranges.includes(this.constructRange(c))) continue;
+        if (c.kind === 'barrier' || !this.reaches(prof, this.pos(att), this.constructPos(def, c))) continue;
         this.damageConstruct(def, c, this.constructDamage(prof) * hits, prof.name);
       }
     }
@@ -1179,11 +1257,11 @@ export class Game {
   }
 
   // Disruption (Madra Pulse, Oathsign Seal): breaks wind-ups and stances, and constructs if it can.
-  disrupt(f, prof) {
+  disrupt(f, prof, from = this.pos(this.opponent(f))) {
     this.interrupt(f);
     this.breakStances(f);
     if (prof.destroysConstructs) {
-      const hit = f.constructs.filter((c) => prof.ranges.includes(this.constructRange(c)));
+      const hit = f.constructs.filter((c) => this.reaches(prof, from, this.constructPos(f, c)));
       for (const c of hit) this.addLog(`${f.name}'s ${c.name} is dispersed.`, 'warn', f.index);
       f.constructs = f.constructs.filter((c) => !hit.includes(c));
     }
@@ -1215,8 +1293,8 @@ export class Game {
     if (a.kind === 'move') return '';
     const prof = a.profile;
     if (!prof) return '';
-    const landsIn = prof.target ? true : prof.ranges.includes(this.distanceAt(e.time));
-    const out = landsIn ? '' : ' · out of range when it lands';
+    const landsIn = prof.target || prof.overhead ? true : this.reaches(prof, this.pos(f, e.time), this.pos(o, e.time));
+    const out = landsIn ? '' : ' · out of range or blocked when it lands';
     if (a.kind === 'pulse' || prof.effect === 'pulse') {
       const names = this.pulseTargets(o, prof.madra, prof.ranges).map((x) => x.name);
       return `Cancels ${names.length ? names.join(', ') : `nothing of ${o.name}'s right now`} unless ${o.name} blocks${out}`;
@@ -1332,14 +1410,9 @@ export class Game {
     const o = this.opponent(f);
     const a = ev.action;
     if (a.kind === 'move') {
+      f.pos = { x: a.to.x, y: a.to.y };
       f.moving = null;
-      const nd = Math.min(2, Math.max(0, this.distance + a.dir));
-      if (nd === this.distance) {
-        this.addLog(`${f.name} finishes moving, but the range is already ${R.RANGES[nd]}.`, 'dim', f.index);
-      } else {
-        this.distance = nd;
-        this.addLog(`${f.name} arrives: now at ${R.RANGES[nd]} range.`, '', f.index);
-      }
+      this.addLog(`${f.name} ${a.via ? 'lands' : 'arrives'}: ${fmt(this.gap())} m apart (${R.RANGES[this.band()]} range).`, '', f.index);
       return;
     }
     if (a.kind === 'piece') {
@@ -1354,7 +1427,7 @@ export class Game {
 
     if (a.kind === 'forged') {
       const hp = Math.round(a.madra * ((this.crownTech(f) || {}).sizeMult || 1));
-      f.constructs.push({ id: `c${this.nextId++}`, kind: 'star', name: `Star (${a.madra})`, hp, maxHp: hp, madra: a.madra, range: 2 });
+      f.constructs.push({ id: `c${this.nextId++}`, kind: 'star', name: `Star (${a.madra})`, hp, maxHp: hp, madra: a.madra });
       this.addLog(`${f.name}'s Crown gains a ${a.madra}-madra star: ${this.stars(f).length} overhead.`, '', f.index);
       return;
     }
@@ -1372,9 +1445,16 @@ export class Game {
     }
 
     const profile0 = a.profile;
-    if (!profile0.target && !profile0.ranges.includes(this.distance)) {
-      this.addLog(`${f.name}'s ${profile0.name} lands, but ${o.name} is out of range.`, 'miss', f.index);
-      return;
+    if (!profile0.target && !profile0.overhead) {
+      const s = this.sight(this.pos(f), this.pos(o));
+      if (!profile0.ranges.includes(s.band)) {
+        this.addLog(`${f.name}'s ${profile0.name} lands, but ${o.name} is out of range (${fmt(s.dist)} m).`, 'miss', f.index);
+        return;
+      }
+      if (s.blockedBy) {
+        this.addLog(`${f.name}'s ${profile0.name} lands, but a ${s.blockedBy.name} is in the way.`, 'miss', f.index);
+        return;
+      }
     }
     if (a.kind === 'pulse') {
       const factor = R.blockCostFactor(1) * (profile0.pure ? 2 : 1);
@@ -1388,7 +1468,7 @@ export class Game {
     }
     if (a.kind === 'disrupt' && profile0.area) {
       this.addLog(`${f.name}'s ${profile0.name} washes over ${o.name}.`, 'hit', f.index);
-      this.disrupt(o, profile0);
+      this.disrupt(o, profile0, this.pos(f));
       return;
     }
 
@@ -1399,7 +1479,7 @@ export class Game {
         this.addLog(`${f.name}'s ${profile0.name} lands where its target used to be.`, 'miss', f.index);
         return;
       }
-      if (!profile0.ranges.includes(this.constructRange(c))) {
+      if (!this.reaches(profile0, this.pos(f), this.constructPos(o, c))) {
         this.addLog(`${f.name}'s ${profile0.name} can't reach ${o.name}'s ${c.name}.`, 'miss', f.index);
         return;
       }
@@ -1423,7 +1503,8 @@ export class Game {
   }
 
   resolveConstructAttack(att, owner, prof, c, blockDR) {
-    const roll = this.rollHit(att, CONSTRUCT_DEFENSE, { ...prof, bestRange: prof.bestRange - (this.constructRange(c) - this.distance) });
+    const band = this.sight(this.pos(att), this.constructPos(owner, c)).band;
+    const roll = this.rollHit(att, CONSTRUCT_DEFENSE, prof, this.rangePenalty(prof, band));
     if (!roll.hit) {
       this.addLog(`${att.name}'s ${prof.name} misses ${owner.name}'s ${c.name}. ${roll.text}`, 'miss', att.index);
       return;
@@ -1481,7 +1562,7 @@ export class Game {
   eventItem(e) {
     const f = this.fighters[e.actor];
     const k = e.action.kind;
-    const label = k === 'move' ? `finishes moving ${e.action.dir < 0 ? 'in' : 'away'}`
+    const label = k === 'move' ? (e.action.via ? 'lands' : 'arrives')
       : k === 'stance' ? `${(this.tech(f, e.action.id) || {}).name} is up`
       : k === 'piece' ? `barrier piece ${e.action.n}/${e.action.of} forms`
       : k === 'forged' ? `Crown star (${e.action.madra}) forms`
