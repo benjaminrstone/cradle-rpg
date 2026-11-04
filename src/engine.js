@@ -139,7 +139,8 @@ export class Game {
   }
 
   physBonus(f) {
-    return this.activeStances(f).reduce((sum, d) => sum + (d.physBonus || 0), 0);
+    return this.activeStances(f).reduce((sum, d) => sum + (d.physBonus || 0), 0)
+      + this.rings(f).reduce((sum, c) => sum + c.meleeBonus, 0);
   }
 
   stanceDR(f) {
@@ -555,7 +556,7 @@ export class Game {
         enabled: enough, reason: enough ? '' : 'Not enough madra',
         lines: [
           `Costs ${t.fixedCost} madra · ring forms at t=${fmt(this.time + w)} · next turn then`,
-          `Speed ${fmt(this.speed(f))} → ${fmt(this.speed(f, t.speedBonus))}${n ? ` (${n + 1} rings)` : ''}`,
+          `Speed ${fmt(this.speed(f))} → ${fmt(this.speed(f, t.speedBonus))}, melee damage +${t.meleeBonus} (strike ${fmt(this.attackProfile(f, 'strike').damage)} → ${fmt(this.attackProfile(f, 'strike').damage + t.meleeBonus)})${n ? ` · ${n + 1} rings` : ''}`,
           `Ring HP ${t.fixedCost}, on you: it can be targeted, and area attacks hit it`,
         ],
       };
@@ -737,7 +738,7 @@ export class Game {
       const w = this.twind(t, t.windup, f.stats.control);
       q(this.time + w, `${t.ringName} forms`, 'construct');
       nextTurn(this.time + w);
-      out.notes[f.index] = `+${t.speedBonus} Speed once it forms`;
+      out.notes[f.index] = `+${t.speedBonus} Speed and +${t.meleeBonus} melee damage once it forms`;
       return out;
     }
 
@@ -1209,7 +1210,7 @@ export class Game {
       return `When dropped: ${res.dmg} spirit damage to ${o.name} · ${pct(this.hitChance(f, o, this.starProfile(f, a.madra)))} to hit${herThreshold(res)}`;
     }
     if (a.kind === 'stance') return `Raises ${this.tech(f, a.id).name}`;
-    if (a.kind === 'ring') return `+${this.tech(f, a.id).speedBonus} Speed for ${f.name}`;
+    if (a.kind === 'ring') { const t = this.tech(f, a.id); return `+${t.speedBonus} Speed and +${t.meleeBonus} melee damage for ${f.name}`; }
     if (a.kind === 'piece') return `Adds ${fmt(a.madra * 2 * ((this.tech(f, a.id) || {}).sizeMult || 1))} HP to ${f.name}'s barrier`;
     if (a.kind === 'move') return '';
     const prof = a.profile;
@@ -1359,9 +1360,9 @@ export class Game {
     }
     if (a.kind === 'ring') {
       const t = this.tech(f, a.id);
-      f.constructs.push({ id: `c${this.nextId++}`, kind: 'ring', name: t.ringName, hp: t.fixedCost, maxHp: t.fixedCost, madra: t.fixedCost, speedBonus: t.speedBonus });
+      f.constructs.push({ id: `c${this.nextId++}`, kind: 'ring', name: t.ringName, hp: t.fixedCost, maxHp: t.fixedCost, madra: t.fixedCost, speedBonus: t.speedBonus, meleeBonus: t.meleeBonus });
       const n = this.rings(f).length;
-      this.addLog(`${f.name}'s ${t.ringName} forms: +${t.speedBonus} Speed (${n} ring${n > 1 ? 's' : ''}, Speed ${fmt(this.speed(f))}).`, '', f.index);
+      this.addLog(`${f.name}'s ${t.ringName} forms: +${t.speedBonus} Speed, +${t.meleeBonus} melee damage (${n} ring${n > 1 ? 's' : ''}: Speed ${fmt(this.speed(f))}, strike ${fmt(this.attackProfile(f, 'strike').damage)}).`, '', f.index);
       return;
     }
     if (a.kind === 'stance') {

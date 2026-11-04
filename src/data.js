@@ -32,8 +32,8 @@ export const STAT_GROUPS = [
 
 // Oathsign is one technique with many uses; they share a card.
 const OATHSIGN = {
-  card: 'oathsign', cardTitle: 'Oathsign', cardType: 'Enforcer / Forger',
-  cardDesc: 'Script circles of force madra, Forged for whatever the fight needs: rings around the hammer for a heavy blow, a shield, a ring for Speed, a ring that flings you a range band, and a seal that breaks the opponent’s techniques.',
+  card: 'oathsign', cardTitle: 'Oathsign', cardType: 'Forger',
+  cardDesc: 'Script circles of force madra, Forged for whatever the fight needs: a shield, rings for Speed and heavier blows, a ring that flings you a range band, and a seal that breaks the opponent’s techniques.',
 };
 
 export const PATHS = {
@@ -144,19 +144,14 @@ export const PATHS = {
         desc: '+6 damage reduction (not against spiritual hits), and your stances take 50% more to break. Upkeep 0.5 madra per tick.',
       },
       {
-        id: 'forceRing', name: 'Oathsign: Force Ring', label: 'Force Ring', ...OATHSIGN, kind: 'attack', type: 'Enforcer', dtype: 'physical',
-        divisor: 3, toHit: 0, ranges: [0], bestRange: 0, base: 10, physical: true, weaponBonus: true,
-        desc: 'Script rings around the hammer multiply the blow: 10 + weapon + madra × efficiency, physical. Close range only.',
-      },
-      {
         id: 'barrier', name: 'Oathsign: Barrier', label: 'Barrier', ...OATHSIGN, kind: 'construct', type: 'Forger', construct: 'barrier',
         divisor: 3,
         desc: 'A script-circle shield with HP of 2 × madra, filling in as it builds while you keep acting. It soaks physical, technique and piercing hits aimed at you before they reach you; other spiritual hits pass through it. Casting again adds to it.',
       },
       {
         id: 'accelerate', name: 'Oathsign: Accelerate', label: 'Accelerate', ...OATHSIGN, kind: 'ring', type: 'Forger',
-        fixedCost: 6, windup: 2, speedBonus: 10, ringName: 'Accelerate ring',
-        desc: 'A script ring Forged around you: +10 Speed while it lasts, and rings stack. It takes 2 ticks to form, and your next turn comes when it does. Each ring is a construct with 6 HP that sits on you: it can be targeted, area attacks hit it, and Madra Pulse can cancel it.',
+        fixedCost: 6, windup: 2, speedBonus: 10, meleeBonus: 1, ringName: 'Accelerate ring',
+        desc: 'A script ring Forged around you: +10 Speed and +1 melee damage while it lasts, and rings stack. It takes 2 ticks to form, and your next turn comes when it does. Each ring is a construct with 6 HP that sits on you: it can be targeted, area attacks hit it, and Madra Pulse can cancel it.',
       },
       {
         id: 'launch', name: 'Oathsign: Launch', label: 'Launch', ...OATHSIGN, kind: 'launch', type: 'Forger',
