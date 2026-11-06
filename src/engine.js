@@ -595,10 +595,8 @@ export class Game {
       }
       const max = this.maxMadra(f, t);
       if ((t.kind === 'attack' || t.kind === 'construct' || t.kind === 'forge' || t.kind === 'pulse') && max >= (t.minMadra || 1)) {
-        const step = t.madraStep || 1;
         const min = t.minMadra || 1;
-        const top = Math.floor(max / step) * step;
-        opt.slider = { label: 'Madra', min, max: top, step, initial: Math.max(min, Math.min(10, top)) };
+        opt.slider = { label: 'Madra', min, max, step: 1, initial: Math.max(min, Math.min(10, max)) };
       }
       if (t.kind === 'attack' && (!t.area || t.aim === 'release')) opt = withTargets(opt, t.ranges);
       if (t.kind === 'attack' && t.area && t.aim === 'set') opt.point = { area: true };
@@ -607,177 +605,66 @@ export class Game {
     return opts;
   }
 
-  // Preview of a turn choice: { enabled, reason, lines }
-  preview(f, key, amount = 0, target = '') {
+  // ---------- turn plans ----------
+  // Everything about one turn choice, worked out once: what the preview says, what it costs,
+  // when the fighter's next turn comes, what goes on the queue, and what it starts.
+  // preview(), project() and act() all read from the same plan (one planner per kind, PLANS below).
+  //   enabled, reason, warning, lines  the preview
+  //   cost      madra spent up front (Black Flame burns its user for it)
+  //   nextTurn  when the fighter acts again
+  //   queue     ghost queue items, in order; TURN marks the fighter's next turn
+  //   path      a move's route, for the field
+  //   project   (p) => adds the expected effect on the bars to a projection
+  //   apply     () => starts it: wind-ups, events, log (act pays the cost and sets nextTurn)
+  //   free      a free action (dropping a stance): act applies it and the turn goes on
+  plan(f, key, amount = 0, target = '') {
     const o = this.opponent(f);
-    const spd = this.speed(f);
-    const tc = target ? o.constructs.find((c) => c.id === target) : null;
-    const attackLines = (prof, hits) => {
-      if (tc) {
-        const dmg = this.constructDamage(prof);
-        return `${hits > 1 ? hits + ' hits × ' : ''}${dmg} damage to ${tc.name} · ${pct(this.constructHitChance(f, prof, tc))} to hit`;
-      }
-      const res = this.hitResult(f, o, prof);
-      const soak = res.absorbed ? ` (barrier soaks ${fmt(res.absorbed)})` : '';
-      const where = res.track === 'spirit' ? ' to spirit' : '';
-      return `${hits > 1 ? hits + ' hits × ' : ''}${fmt(prof.damage)} damage (${res.dmg}${where} after reduction${soak}) · ${this.hitText(f, o, prof)}`;
-    };
-
-    if (key === 'strike') {
-      const prof = this.attackProfile(f, 'strike');
-      const w = R.physTime(R.TIMING.strikeWindup, spd);
-      const gate = tc ? this.constructGate(f, [0], tc, 'Close range only') : this.rangeGate(f, [0], this.time + w, 'Close range only');
-      const lines = [`Wind-up ${fmt(w)} · next turn in ${fmt(w)}`, attackLines(prof, prof.hits)];
-      if (gate.note) lines.push(gate.note);
-      return { enabled: true, reason: '', warning: gate.warning, lines };
-    }
-    if (key === 'move') {
-      const plan = this.planMove(f, target);
-      if (plan.error) return { enabled: false, reason: plan.error, lines: [`${fmt(R.TIMING.moveRate * (spd / 100) ** 2)} m per tick at your Speed, around obstacles`] };
-      const w = R.moveTime(plan.length, spd);
-      return { enabled: true, reason: '', lines: this.moveLines(f, plan, w, w) };
-    }
-    if (key === 'wait') {
-      return { enabled: true, reason: '', lines: [`Next turn in ${fmt(clampWait(amount))}`] };
-    }
-    if (key.startsWith('drop:')) {
-      const def = this.tech(f, key.slice(5));
-      const delay = R.TIMING.reraiseDelay * R.controlFactor(f.stats.control);
-      return { enabled: true, reason: '', lines: [`Free. Can be raised again after ${fmt(delay)} ticks${def.buildUp ? '; build-up is lost' : ''}`] };
-    }
-
     const t = this.tech(f, key);
-    if (t.kind === 'stance') {
-      const locked = f.lockedUntil[t.id] && f.lockedUntil[t.id] > this.time + EPS;
-      const w = this.twind(t, R.TIMING.stanceWindup, f.stats.control);
-      const enough = f.madra >= t.raiseCost;
-      const reason = locked ? `Can be raised again at t=${fmt(f.lockedUntil[t.id])}` : !enough ? 'Not enough madra' : '';
-      return {
-        enabled: !locked && enough,
-        reason,
-        lines: [
-          `Costs ${t.raiseCost} madra · wind-up ${fmt(w)} · next turn in ${fmt(w)}`,
-          `Upkeep ${fmt(t.upkeep * R.controlFactor(f.stats.control))} madra per tick${t.buildUp ? ', rising with build-up' : ''}`,
-        ],
-      };
-    }
-    if (t.kind === 'launch') {
-      const plan = this.planMove(f, target, { reach: this.launchReach(t), flight: true });
-      const enough = f.madra >= t.fixedCost;
-      const lines = [`Costs ${t.fixedCost} madra · flies up to ${fmt(this.launchReach(t))} m in a straight line in ${fmt(t.travel)} ticks`];
-      if (plan.error) return { enabled: false, reason: plan.error, lines };
-      return {
-        enabled: enough,
-        reason: enough ? '' : 'Not enough madra',
-        lines: [lines[0], ...this.moveLines(f, plan, t.travel, t.travel + t.recovery)],
-      };
-    }
-    if (t.kind === 'command') {
-      const stars = this.stars(f).sort((a, b) => b.madra - a.madra);
-      if (!stars.length) return { enabled: false, reason: 'No stars forged', lines: [] };
-      const n = Math.min(Math.max(1, Math.round(amount) || stars.length), stars.length);
-      const chosen = stars.slice(0, n);
-      const after = chosen.map((c) => this.hitResult(f, o, this.starProfile(f, c.madra)).dmg);
-      const chance = this.hitChance(f, o, this.starProfile(f, chosen[0].madra));
-      return {
-        enabled: true, reason: '',
-        lines: [
-          `Drops ${n} of ${stars.length} star(s), biggest first · they land t=${fmt(this.time + STAR.dropTime)} · next turn then`,
-          `${chosen.map((c) => c.madra).join(' + ')} madra: ${after.join(' + ')} spirit damage after reduction · ${pct(chance)} to hit each`,
-        ],
-      };
-    }
-    if (t.kind === 'pulse') {
-      const max = this.maxMadra(f, t);
-      if (max < t.minMadra) return { enabled: false, reason: 'Not enough madra', lines: [] };
-      const madra = Math.min(Math.max(t.minMadra, Math.round(amount)), max);
-      const w = this.twind(t, R.nominalWindup(madra, t.divisor), f.stats.control);
-      const gate = this.rangeGate(f, t.ranges, this.time + w, 'Out of range (Close)');
-      const targets = this.pulseTargets(o, madra, t.ranges);
-      const lines = [
-        `Wind-up ${fmt(w)} (lands t=${fmt(this.time + w)}) · next turn in ${fmt(w)}`,
-        `Cancels ${o.name}'s wind-ups, stances and constructs costing up to ${fmt(madra / 2)} · no roll`,
-        targets.length ? `Right now: ${targets.map((x) => `${x.name} (${fmt(x.cost)})`).join(', ')}` : `Nothing of ${o.name}'s is that cheap right now`,
-        `${o.name} can block it at double cost: each point takes 1.5 off its strength`,
-      ];
-      if (gate.note) lines.push(gate.note);
-      return { enabled: true, reason: '', warning: gate.warning, lines };
-    }
-    if (t.kind === 'disrupt') {
-      const enough = f.madra >= t.fixedCost;
-      const w = this.twind(t, t.windup, f.stats.control);
-      const rangeText = `Out of range (${t.ranges.map((r) => R.RANGES[r]).join('/')})`;
-      const gate = this.rangeGate(f, t.ranges, this.time + w, rangeText);
-      const prof = this.disruptProfile(f, t);
-      const lines = [`Costs ${t.fixedCost} madra · wind-up ${fmt(w)} (lands t=${fmt(this.time + w)}) · next turn in ${fmt(w)}`];
-      lines.push(t.area
-        ? `Breaks ${o.name}'s wind-ups, stances${t.destroysConstructs ? ' and constructs' : ''} at ${t.ranges.map((r) => R.RANGES[r]).join('/')} range · no roll`
-        : `If it hits, breaks ${o.name}'s wind-ups and stances · ${this.hitText(f, o, prof)}`);
-      if (gate.note) lines.push(gate.note);
-      return { enabled: enough, reason: enough ? '' : 'Not enough madra', warning: gate.warning, lines };
-    }
-    if (t.kind === 'ring') {
-      const enough = f.madra >= t.fixedCost;
-      const w = this.twind(t, t.windup, f.stats.control);
-      const n = this.rings(f).length;
-      return {
-        enabled: enough, reason: enough ? '' : 'Not enough madra',
-        lines: [
-          `Costs ${t.fixedCost} madra · ring forms at t=${fmt(this.time + w)} · next turn then`,
-          `Speed ${fmt(this.speed(f))} → ${fmt(this.speed(f, t.speedBonus))}, melee damage +${t.meleeBonus} (strike ${fmt(this.attackProfile(f, 'strike').damage)} → ${fmt(this.attackProfile(f, 'strike').damage + t.meleeBonus)})${n ? ` · ${n + 1} rings` : ''}`,
-          `Ring HP ${t.fixedCost}, on you: it can be targeted, and area attacks hit it`,
-        ],
-      };
-    }
+    const kind = key === 'strike' || key === 'move' || key === 'wait' ? key : key.startsWith('drop:') ? 'drop' : t.kind;
+    const ctx = { key, t, amount, target, o, spd: this.speed(f), tc: target ? o.constructs.find((c) => c.id === target) : null };
+    return PLANS[kind](this, f, ctx);
+  }
 
-    const max = this.maxMadra(f, t);
-    if (max < (t.minMadra || 1)) return { enabled: false, reason: 'Not enough madra', lines: [] };
-    const step = t.madraStep || 1;
-    const madra = Math.min(Math.max(t.minMadra || 1, Math.round(amount / step) * step), Math.floor(max / step) * step);
-    const nominal = R.nominalWindup(madra, t.divisor);
-    const w = this.twind(t, nominal, f.stats.control);
-    const next = t.ruler ? R.TIMING.actWhileBuilding : w;
-    const timing = `${t.costMult ? `Costs ${fmt(madra * t.costMult)} madra · ` : ''}Wind-up ${fmt(w)} (lands t=${fmt(this.time + w)}) · next turn in ${fmt(next)}${t.ruler ? ' (Ruler: act while it builds)' : ''}`;
+  // Preview of a turn choice: { enabled, reason, warning, lines }
+  preview(f, key, amount = 0, target = '') {
+    const { enabled, reason, warning, lines } = this.plan(f, key, amount, target);
+    return { enabled, reason, warning, lines };
+  }
 
-    if (t.kind === 'forge') {
-      const sp = this.starProfile(f, madra);
-      return {
-        enabled: true, reason: '',
-        lines: [
-          `Star forms at t=${fmt(this.time + w)} (${fmt(w)} ticks) · next turn in ${fmt(STAR.forgeRecovery)} (keep acting while it forms)`,
-          `When dropped: ${fmt(sp.damage)} spiritual (${this.hitResult(f, o, sp).dmg} after ${o.name}'s reduction) · star HP ${fmt(madra * (t.sizeMult || 1))}, high overhead (Far)`,
-        ],
-      };
-    }
-    if (t.kind === 'construct') {
-      const pieces = this.forgePieces(t, madra);
-      const build = `Builds over ${fmt(w)} ticks, one piece every ${fmt(w / pieces.length)} · next turn in ${fmt(R.TIMING.actWhileBuilding)} (Forger: act while it builds)`;
-      const line = `Barrier HP +${fmt(madra * 2 * (t.sizeMult || 1))}${this.barrier(f) ? ` (now ${fmt(this.barrier(f).hp)})` : ''}, filling in as it builds`;
-      return { enabled: true, reason: '', lines: [build, line] };
-    }
+  // The madra a scaling technique would use for a slider amount.
+  madraFor(f, t, amount) {
+    return Math.min(Math.max(t.minMadra || 1, Math.round(amount)), this.maxMadra(f, t));
+  }
 
-    const prof = this.attackProfile(f, key, madra);
-    if (prof.area) {
-      const err = this.aimArea(f, prof, target);
-      if (err) return { enabled: false, reason: err, lines: [timing, `Radius ${fmt(prof.radius)} m; pick its centre on the field`] };
-      const gate = this.areaGate(f, prof, this.time + w);
-      const ac = prof.aimAt ? tc : null;
-      const lines = [timing, this.areaLine(f, prof), ac ? `${this.constructDamage(prof)} damage to ${ac.name}` : attackLines(prof, this.hitsAgainst(f, o, prof))];
-      if (gate.note) lines.push(gate.note);
-      if (prof.sharpness) lines.push(`Sharpness ${prof.sharpness}`);
-      if (t.boostPerMadra) lines.push(`+${t.boostPerMadra} damage per Black Flame madra you spend while it winds up`);
-      if (this.path(f).selfBurn) lines.push(`Burns you for ${fmt(madra / 5)} health and ${fmt(madra / 10)} spirit`);
-      return { enabled: true, reason: '', warning: gate.warning, lines };
+  reraiseDelay(f) { return R.TIMING.reraiseDelay * R.controlFactor(f.stats.control); }
+
+  // A preview line for an attack: damage after the target's reduction, and the chance to hit.
+  attackLines(f, prof, hits, tc = null) {
+    const o = this.opponent(f);
+    if (tc) {
+      const dmg = this.constructDamage(prof);
+      return `${hits > 1 ? hits + ' hits × ' : ''}${dmg} damage to ${tc.name} · ${pct(this.constructHitChance(f, prof, tc))} to hit`;
     }
-    const rangeText = `Out of range (${prof.ranges.map((r) => R.RANGES[r]).join('/')})`;
-    const gate = tc ? this.constructGate(f, prof.ranges, tc, rangeText) : this.rangeGate(f, prof.ranges, this.time + w, rangeText);
-    const hits = tc ? 1 : this.hitsAgainst(f, o, prof);
-    const lines = [timing, attackLines(prof, hits)];
-    if (gate.note) lines.push(gate.note);
+    const res = this.hitResult(f, o, prof);
+    const soak = res.absorbed ? ` (barrier soaks ${fmt(res.absorbed)})` : '';
+    const where = res.track === 'spirit' ? ' to spirit' : '';
+    return `${hits > 1 ? hits + ' hits × ' : ''}${fmt(prof.damage)} damage (${res.dmg}${where} after reduction${soak}) · ${this.hitText(f, o, prof)}`;
+  }
+
+  // The end of an attack's preview: sharpness, Black Flame boost, and the burn.
+  attackNotes(f, t, prof, madra) {
+    const lines = [];
     if (prof.sharpness) lines.push(`Sharpness ${prof.sharpness}`);
     if (t.boostPerMadra) lines.push(`+${t.boostPerMadra} damage per Black Flame madra you spend while it winds up`);
     if (this.path(f).selfBurn) lines.push(`Burns you for ${fmt(madra / 5)} health and ${fmt(madra / 10)} spirit`);
-    return { enabled: true, reason: '', warning: gate.warning, lines };
+    return lines;
+  }
+
+  // " at Yerin's Star (5)" when a target is one of the opponent's constructs.
+  aimedAt(f, target) {
+    const o = this.opponent(f);
+    const c = target ? o.constructs.find((x) => x.id === target) : null;
+    return c ? ` at ${o.name}'s ${c.name}` : '';
   }
 
   launchReach(t) { return t.reach || A.LAUNCH_REACH; }
@@ -847,130 +734,32 @@ export class Game {
   // ---------- projections (hover previews) ----------
   // What a turn choice would change: bar deltas per fighter and ghost queue items.
   project(f, key, amount = 0, target = '') {
-    if (!this.preview(f, key, amount, target).enabled || key.startsWith('drop:')) return null;
+    const p = this.plan(f, key, amount, target);
+    if (!p.enabled || p.free) return null;
     const o = this.opponent(f);
-    const spd = this.speed(f);
     const out = { deltas: [{}, {}], notes: ['', ''], queue: [], replacesTurn: f.index };
     const add = (who, k, v) => { out.deltas[who][k] = (out.deltas[who][k] || 0) + v; };
+    if (p.cost != null) {
+      add(f.index, 'madra', -p.cost);
+      if (this.path(f).selfBurn) { add(f.index, 'health', -p.cost / 5); add(f.index, 'spirit', -p.cost / 10); }
+    }
     // Queue item types: turn, attack, move, stance, construct, buildup (each gets its own marker shape).
-    const q = (time, label, type) => out.queue.push({ time, label: `${f.name}: ${label}`, who: f.index, kind: 'resolve', type, ghost: true });
-    const nextTurn = (time) => out.queue.push({ time, label: `${f.name}'s next turn`, who: f.index, kind: 'turn', type: 'turn', ghost: true });
-    const spendM = (m) => {
-      add(f.index, 'madra', -m);
-      if (this.path(f).selfBurn) { add(f.index, 'health', -m / 5); add(f.index, 'spirit', -m / 10); }
-    };
-    const hitDelta = (prof, hits) => {
-      if (target) { out.notes[o.index] = `aimed at a construct`; return; }
+    for (const q of p.queue) {
+      out.queue.push(q === TURN
+        ? { time: p.nextTurn, label: `${f.name}'s next turn`, who: f.index, kind: 'turn', type: 'turn', ghost: true }
+        : { time: q.time, label: `${f.name}: ${q.label}`, who: f.index, kind: 'resolve', type: q.type, ghost: true });
+    }
+    if (p.path) out.path = p.path;
+    // The expected damage of an attack on the opponent, if it lands.
+    const hit = (prof, hits) => {
+      if (target) { out.notes[o.index] = 'aimed at a construct'; return; }
       const res = this.hitResult(f, o, prof);
       add(o.index, res.track, -res.dmg * hits);
       out.notes[o.index] = prof.area
         ? `${hits > 1 ? `${hits} hits, ` : ''}no roll`
         : `if ${hits > 1 ? `all ${hits} hit` : 'it hits'} (${pct(this.hitChance(f, o, prof))}${hits > 1 ? ' each' : ''})`;
     };
-
-    if (key === 'strike') {
-      const prof = this.attackProfile(f, 'strike');
-      q(this.time + R.physTime(R.TIMING.strikeWindup, spd), `${prof.name} lands`, 'attack');
-      nextTurn(this.time + R.physTime(R.TIMING.strikeWindup, spd));
-      hitDelta(prof, prof.hits);
-      return out;
-    }
-    if (key === 'move') {
-      const plan = this.planMove(f, target);
-      const w = R.moveTime(plan.length, spd);
-      q(this.time + w, `arrives (${fmt(plan.length)} m)`, 'move');
-      nextTurn(this.time + w);
-      out.path = { who: f.index, from: plan.from, path: plan.path };
-      return out;
-    }
-    if (key === 'wait') {
-      nextTurn(this.time + clampWait(amount));
-      return out;
-    }
-
-    const t = this.tech(f, key);
-    if (t.kind === 'stance') {
-      spendM(t.raiseCost);
-      const w = this.twind(t, R.TIMING.stanceWindup, f.stats.control);
-      q(this.time + w, `${t.name} is up`, 'stance');
-      nextTurn(this.time + w);
-      return out;
-    }
-    if (t.kind === 'launch') {
-      spendM(t.fixedCost);
-      const plan = this.planMove(f, target, { reach: this.launchReach(t), flight: true });
-      q(this.time + t.travel, `lands (${fmt(plan.length)} m)`, 'move');
-      nextTurn(this.time + t.travel + t.recovery);
-      out.path = { who: f.index, from: plan.from, path: plan.path };
-      return out;
-    }
-    if (t.kind === 'command') {
-      const stars = this.stars(f).sort((a, b) => b.madra - a.madra);
-      const n = Math.min(Math.max(1, Math.round(amount) || stars.length), stars.length);
-      q(this.time + STAR.dropTime, `${n} star(s) land`, 'attack');
-      nextTurn(this.time + STAR.dropTime);
-      for (const c of stars.slice(0, n)) add(o.index, 'spirit', -this.hitResult(f, o, this.starProfile(f, c.madra)).dmg);
-      out.notes[o.index] = 'if every star hits';
-      return out;
-    }
-    if (t.kind === 'pulse') {
-      const madra = Math.min(Math.max(t.minMadra, Math.round(amount)), this.maxMadra(f, t));
-      spendM(madra);
-      const w = this.twind(t, R.nominalWindup(madra, t.divisor), f.stats.control);
-      q(this.time + w, `${t.name} lands`, 'attack');
-      nextTurn(this.time + w);
-      const targets = this.pulseTargets(o, madra, t.ranges);
-      out.notes[o.index] = targets.length ? `unless blocked: ${targets.map((x) => x.name).join(', ')} break` : 'nothing cheap enough to break';
-      return out;
-    }
-    if (t.kind === 'disrupt') {
-      spendM(t.fixedCost);
-      const w = this.twind(t, t.windup, f.stats.control);
-      q(this.time + w, `${t.name} lands`, 'attack');
-      nextTurn(this.time + w);
-      out.notes[o.index] = t.area ? 'wind-ups, stances and constructs break' : 'if it hits: wind-ups and stances break';
-      return out;
-    }
-    if (t.kind === 'ring') {
-      spendM(t.fixedCost);
-      const w = this.twind(t, t.windup, f.stats.control);
-      q(this.time + w, `${t.ringName} forms`, 'construct');
-      nextTurn(this.time + w);
-      out.notes[f.index] = `+${t.speedBonus} Speed and +${t.meleeBonus} melee damage once it forms`;
-      return out;
-    }
-
-    const step = t.madraStep || 1;
-    const madra = Math.min(Math.max(t.minMadra || 1, Math.round(amount / step) * step), this.maxMadra(f, t));
-    spendM(madra * (t.costMult || 1));
-    const w = this.twind(t, R.nominalWindup(madra, t.divisor), f.stats.control);
-    if (t.kind === 'forge') {
-      nextTurn(this.time + STAR.forgeRecovery);
-      q(this.time + w, `star (${madra}) forms`, 'construct');
-      return out;
-    }
-    nextTurn(this.time + (t.ruler || t.kind === 'construct' ? R.TIMING.actWhileBuilding : w));
-    if (t.kind === 'construct') {
-      const pieces = this.forgePieces(t, madra);
-      pieces.forEach((pc, i) => q(this.time + w * ((i + 1) / pieces.length), `barrier piece ${i + 1}/${pieces.length} forms`, 'construct'));
-      return out;
-    }
-    const prof = this.attackProfile(f, key, madra);
-    q(this.time + w, `${t.name} lands`, 'attack');
-    if (prof.area) {
-      this.aimArea(f, prof, target);
-      const l = this.areaLands(f, prof, this.time + w);
-      if (l.centre) out.area = { who: f.index, centre: l.centre, radius: prof.radius };
-      if (prof.aimAt) out.notes[o.index] = 'aimed at a construct';
-      else if (l.ok) {
-        const hits = this.hitsAgainst(f, o, prof);
-        const res = this.hitResult(f, o, prof);
-        add(o.index, res.track, -res.dmg * hits);
-        out.notes[o.index] = `${hits > 1 ? `${hits} hits, ` : ''}no roll`;
-      } else out.notes[o.index] = `missed: ${l.why}`;
-      return out;
-    }
-    hitDelta(prof, this.hitsAgainst(f, o, prof));
+    if (p.project) p.project({ out, add, hit });
     return out;
   }
 
@@ -982,6 +771,7 @@ export class Game {
     const def = this.fighters[p.fighter];
     // Pure madra makes blocks (and reinforcing a construct) cost double.
     const factor = R.blockCostFactor(a.hits) * (a.profile.pure ? 2 : 1);
+    const block = (chance) => ({ chance, factor, hits: a.hits, maxBase: Math.floor(this.maxMadra(def) / factor), delay: R.TIMING.blockDelay });
     const c = a.construct ? def.constructs.find((x) => x.id === a.construct) : null;
     if (c) {
       // Defending a construct: no dodge or redirect, only reinforcing it with madra (a block).
@@ -991,44 +781,36 @@ export class Game {
         construct: c,
         take: { chance, damage: dmg, damageText: `${dmg}` },
         dodge: { available: false, chance, bonus: 0, reduction: 0, delay: 0 },
-        block: { chance, factor, hits: a.hits, maxBase: Math.floor(this.maxMadra(def) / factor), delay: R.TIMING.blockDelay },
+        block: block(chance),
         redirect: { available: false, shown: false, cost: 0 },
       };
     }
     const redirectCost = Math.ceil((a.profile.madra || 0) / 2);
     const canRedirect = this.stanceFlag(def, 'redirect') && !a.profile.area && a.profile.dtype !== 'physical'
       && !a.profile.fromConstruct && (a.profile.madra || 0) > 0;
+    const chance = this.hitChance(att, def, a.profile);
+    const each = this.hitProfiles(a.profile, a.hits).map((hp) => this.hitResult(att, def, hp).dmg);
+    const bonus = R.dodgeBonus(this.speed(def), this.speed(att));
     return {
-      take: (() => {
-        const each = this.hitProfiles(a.profile, a.hits).map((hp) => this.hitResult(att, def, hp).dmg);
-        return { chance: this.hitChance(att, def, a.profile), damage: each[0], damageText: a.profile.hitDamages ? each.join(' + ') : `${each[0]}` };
-      })(),
-      dodge: (() => {
-        const bonus = R.dodgeBonus(this.speed(def), this.speed(att));
-        return {
-          available: a.profile.effect !== 'pulse',
-          chance: this.hitChance(att, def, a.profile, true),
-          // Chance to hit for each hit of the attack while dodging (the dodge tapers off).
-          chances: Array.from({ length: a.hits }, (_, i) => this.hitChance(att, def, a.profile, true, i)),
-          bonuses: Array.from({ length: a.hits }, (_, i) => Math.max(0, bonus - i)),
-          bonus,
-          reduction: a.profile.area ? R.areaDodgeReduction(bonus) : 0,
-          delay: R.physTime(R.TIMING.dodge, this.speed(def)),
-        };
-      })(),
-      block: {
-        chance: this.hitChance(att, def, a.profile),
-        factor,
-        hits: a.hits,
-        maxBase: Math.floor(this.maxMadra(def) / factor),
-        delay: R.TIMING.blockDelay,
+      take: { chance, damage: each[0], damageText: a.profile.hitDamages ? each.join(' + ') : `${each[0]}` },
+      dodge: {
+        available: a.profile.effect !== 'pulse',
+        chance: this.hitChance(att, def, a.profile, true),
+        // Chance to hit for each hit of the attack while dodging (the dodge tapers off).
+        chances: Array.from({ length: a.hits }, (_, i) => this.hitChance(att, def, a.profile, true, i)),
+        bonuses: Array.from({ length: a.hits }, (_, i) => Math.max(0, bonus - i)),
+        bonus,
+        reduction: a.profile.area ? R.areaDodgeReduction(bonus) : 0,
+        delay: R.physTime(R.TIMING.dodge, this.speed(def)),
       },
-      redirect: {
-        available: canRedirect && def.madra >= redirectCost,
-        shown: canRedirect,
-        cost: redirectCost,
-      },
+      block: block(chance),
+      redirect: { available: canRedirect && def.madra >= redirectCost, shown: canRedirect, cost: redirectCost },
     };
+  }
+
+  // The base madra of a block (before the multi-hit and pure-madra factors), within what the defender can channel.
+  blockAmount(ro, blockBase) {
+    return Math.min(Math.max(0, Math.round(blockBase)), ro.block.maxBase);
   }
 
   // The result of a reaction choice: damage per hit, chance per hit, madra and time it costs.
@@ -1040,27 +822,29 @@ export class Game {
     if (choice === 'redirect') {
       return { perHit: 0, hits: a.hits, chance: 0, madraCost: ro.redirect.cost, delay: 0, interrupts: false, breaksStances: false, track: 'health' };
     }
-    if (a.profile.effect === 'pulse') {
-      const m = choice === 'block' ? Math.min(Math.max(0, Math.round(blockBase)), ro.block.maxBase) : 0;
+    const pulse = a.profile.effect === 'pulse';
+    const dodging = choice === 'dodge' || choice === 'dodgeBlock';
+    const blocking = choice === 'block' || choice === 'dodgeBlock';
+    // A pulse or an attack on a construct can only be blocked on its own, not with a dodge.
+    const m = (pulse || ro.construct ? choice === 'block' : blocking) ? this.blockAmount(ro, blockBase) : 0;
+    const madraCost = m * ro.block.factor;
+    const blockDelay = m > 0 ? R.TIMING.blockDelay : 0;
+    if (pulse) {
       const strength = Math.max(0, a.profile.madra - 1.5 * m);
       return {
         perHit: 0, total: 0, perHitText: null, track: 'health', absorbed: 0, hits: 1, chance: 1,
-        madraCost: m * ro.block.factor, delay: m > 0 ? R.TIMING.blockDelay : 0, interrupts: false, breaksStances: false,
+        madraCost, delay: blockDelay, interrupts: false, breaksStances: false,
         pulse: { strength, targets: this.pulseTargets(def, strength, a.profile.ranges) },
       };
     }
     if (ro.construct) {
-      const m = choice === 'block' ? Math.min(Math.max(0, Math.round(blockBase)), ro.block.maxBase) : 0;
       const per = Math.max(0, Math.round(ro.take.damage - 1.5 * m));
       return {
         perHit: per, total: per * a.hits, perHitText: null, track: 'construct', absorbed: 0, hits: a.hits,
-        chance: ro.take.chance, madraCost: m * ro.block.factor, delay: m > 0 ? R.TIMING.blockDelay : 0,
+        chance: ro.take.chance, madraCost, delay: blockDelay,
         interrupts: false, breaksStances: false, construct: ro.construct,
       };
     }
-    const dodging = choice === 'dodge' || choice === 'dodgeBlock';
-    const blocking = choice === 'block' || choice === 'dodgeBlock';
-    const m = blocking ? Math.min(Math.max(0, Math.round(blockBase)), ro.block.maxBase) : 0;
     const each = this.hitProfiles(a.profile, a.hits).map((hp, i) => this.hitResult(att, def, hp, { dodging, blockDR: 1.5 * m, hitIndex: i }));
     const res = each[0];
     return {
@@ -1072,8 +856,8 @@ export class Game {
       hits: a.hits,
       chance: a.profile.area ? 1 : dodging ? ro.dodge.chance : ro.take.chance,
       chances: a.profile.area ? null : dodging ? ro.dodge.chances : null,
-      madraCost: m * ro.block.factor,
-      delay: (dodging ? ro.dodge.delay : 0) + (m > 0 ? R.TIMING.blockDelay : 0),
+      madraCost,
+      delay: (dodging ? ro.dodge.delay : 0) + blockDelay,
       interrupts: each.some((r) => r.interrupts),
       breaksStances: each.some((r) => r.breaksStances),
     };
@@ -1108,121 +892,28 @@ export class Game {
     const tk = this.tech(f, key) || {};
     const pointed = key === 'move' || tk.kind === 'launch' || (tk.area && tk.aim === 'set');
     if (target && !pointed && !o.constructs.some((c) => c.id === target)) target = '';
-    const pv = this.preview(f, key, amount, target);
-    if (!pv.enabled) return;
-    const spd = this.speed(f);
+    const p = this.plan(f, key, amount, target);
+    if (!p.enabled) return;
+    if (p.free) { p.apply(); return; } // still their turn
 
-    if (key.startsWith('drop:')) {
-      const id = key.slice(5);
-      delete f.stances[id];
-      f.lockedUntil[id] = this.time + R.TIMING.reraiseDelay * R.controlFactor(f.stats.control);
-      this.addLog(`${f.name} drops ${this.tech(f, id).name}.`, '', f.index);
-      return; // free action: still their turn
-    }
-    const what = key === 'strike' ? 'strikes' : key === 'move' ? 'moves'
-      : key === 'wait' ? 'waits' : (this.tech(f, key) || {}).label || (this.tech(f, key) || {}).name || key;
+    const what = key === 'strike' ? 'strikes' : key === 'move' ? 'moves' : key === 'wait' ? 'waits' : tk.label || tk.name || key;
     this.history.push({ key: `turn:${f.index}:${Math.round(f.nextTurn * 1000)}`, time: this.time, label: `${f.name}: ${what}`, who: f.index, kind: 'turn', type: 'turn' });
-
     if (!['strike', 'move', 'wait'].includes(key)) {
       const id = key.split(':')[0];
-      f.seen = f.seen || [];
       if (!f.seen.includes(id)) f.seen.push(id);
     }
-
-    const aimed = target && !pointed ? ` at ${o.name}'s ${o.constructs.find((c) => c.id === target).name}` : '';
-    let aimedText = aimed;
-    if (key === 'strike') {
-      const prof = { ...this.attackProfile(f, 'strike'), target };
-      const w = R.physTime(R.TIMING.strikeWindup, spd);
-      this.startWindup(f, w, { kind: 'attack', profile: prof }, 0);
-      f.nextTurn = this.time + R.physTime(R.TIMING.strikeWindup, spd);
-      this.addLog(`${f.name} winds up a strike${aimed}.`, '', f.index);
-    } else if (key === 'move') {
-      const plan = this.planMove(f, target);
-      this.startMove(f, plan, R.moveTime(plan.length, spd), 0);
-    } else if (key === 'wait') {
-      const t = clampWait(amount);
-      f.nextTurn = this.time + t;
-      this.addLog(`${f.name} waits ${fmt(t)} ticks.`, 'dim', f.index);
-    } else {
-      const t = this.tech(f, key);
-      const burn = this.path(f).selfBurn;
-      if (t.kind === 'stance') {
-        this.spend(f, t.raiseCost, burn);
-        const w = this.twind(t, R.TIMING.stanceWindup, f.stats.control);
-        this.startWindup(f, w, { kind: 'stance', id: t.id }, t.raiseCost);
-        f.nextTurn = this.time + w;
-        this.addLog(`${f.name} begins raising ${t.name} (${t.raiseCost} madra).`, '', f.index);
-      } else if (t.kind === 'launch') {
-        this.spend(f, t.fixedCost, burn);
-        this.startMove(f, this.planMove(f, target, { reach: this.launchReach(t), flight: true }), t.travel, t.recovery, t.name);
-      } else if (t.kind === 'command') {
-        const stars = this.stars(f).sort((a, b) => b.madra - a.madra);
-        const n = Math.min(Math.max(1, Math.round(amount) || stars.length), stars.length);
-        const chosen = stars.slice(0, n);
-        f.constructs = f.constructs.filter((c) => !chosen.includes(c));
-        const profile = { ...this.starsProfile(f, chosen.map((c) => c.madra)), target: '' };
-        this.events.push({ id: this.nextId++, time: this.time + STAR.dropTime, type: 'resolve', actor: f.index, action: { kind: 'attack', profile } });
-        f.nextTurn = this.time + STAR.dropTime;
-        this.addLog(`${f.name} drops ${n} star${n > 1 ? 's' : ''} from the Crown (${chosen.map((c) => c.madra).join(', ')} madra; landing t=${fmt(this.time + STAR.dropTime)}).`, '', f.index);
-      } else if (t.kind === 'pulse') {
-        const madra = Math.min(Math.max(t.minMadra, Math.round(amount)), this.maxMadra(f, t));
-        this.spend(f, madra, burn);
-        const w = this.twind(t, R.nominalWindup(madra, t.divisor), f.stats.control);
-        this.startWindup(f, w, { kind: 'pulse', id: t.id, profile: this.pulseProfile(f, t, madra) }, madra);
-        f.nextTurn = this.time + w;
-        this.addLog(`${f.name} winds up ${t.name} with ${madra} madra (lands t=${fmt(this.time + w)}).`, '', f.index);
-      } else if (t.kind === 'disrupt') {
-        this.spend(f, t.fixedCost, burn);
-        const w = this.twind(t, t.windup, f.stats.control);
-        this.startWindup(f, w, { kind: 'disrupt', id: t.id, profile: this.disruptProfile(f, t) }, t.fixedCost);
-        f.nextTurn = this.time + w;
-        this.addLog(`${f.name} winds up ${t.name} (lands t=${fmt(this.time + w)}).`, '', f.index);
-      } else if (t.kind === 'ring') {
-        this.spend(f, t.fixedCost, burn);
-        const w = this.twind(t, t.windup, f.stats.control);
-        this.startWindup(f, w, { kind: 'ring', id: t.id }, t.fixedCost, { label: t.ringName });
-        f.nextTurn = this.time + w;
-        this.addLog(`${f.name} begins Forging an ${t.ringName} (${t.fixedCost} madra; forms t=${fmt(this.time + w)}).`, '', f.index);
-      } else {
-        const step = t.madraStep || 1;
-        const madra = Math.min(Math.max(t.minMadra || 1, Math.round(amount / step) * step), Math.floor(this.maxMadra(f, t) / step) * step);
-        this.spend(f, madra * (t.costMult || 1), burn);
-        const w = this.twind(t, R.nominalWindup(madra, t.divisor), f.stats.control);
-        if (t.kind === 'forge') {
-          this.startWindup(f, w, { kind: 'forged', id: t.id, madra }, madra, { label: `Crown star (${madra})` });
-          f.nextTurn = this.time + STAR.forgeRecovery;
-          this.addLog(`${f.name} begins Forging a ${madra}-madra star (forms t=${fmt(this.time + w)}).`, '', f.index);
-        } else {
-          if (t.kind === 'construct') {
-            this.startForge(f, t, w, madra);
-          } else {
-            const prof = { ...this.attackProfile(f, key, madra), target };
-            if (prof.area) {
-              this.aimArea(f, prof, target);
-              if (prof.aim === 'set') aimedText = ` at (${fmt(prof.centre.x)}, ${fmt(prof.centre.y)}), radius ${fmt(prof.radius)} m`;
-              else if (prof.aim === 'release') aimedText = `${aimedText || ` at ${o.name}`}, radius ${fmt(prof.radius)} m`;
-              else aimedText = `, reaching ${fmt(prof.radius)} m around them`;
-            }
-            this.startWindup(f, w, { kind: 'attack', profile: prof }, madra * (t.costMult || 1), { boostPerMadra: t.boostPerMadra || 0 });
-          }
-          f.nextTurn = this.time + (t.ruler || t.kind === 'construct' ? R.TIMING.actWhileBuilding : w);
-          this.addLog(t.kind === 'construct'
-            ? `${f.name} begins Forging ${t.name} with ${madra} madra (complete at t=${fmt(this.time + w)}).`
-            : `${f.name} winds up ${t.name} with ${madra} madra${aimedText} (lands t=${fmt(this.time + w)}).`, '', f.index);
-        }
-      }
-    }
+    if (p.cost != null) this.spend(f, p.cost, this.path(f).selfBurn);
+    p.apply();
+    f.nextTurn = p.nextTurn;
     this.prompt = null;
     this.advance();
   }
 
-  startMove(f, plan, travel, recovery, via = '') {
+  startMove(f, plan, travel, via = '') {
     const ev = { id: this.nextId++, time: this.time + travel, type: 'resolve', actor: f.index, action: { kind: 'move', to: plan.dest, via } };
     this.events.push(ev);
     f.pos = { ...plan.from };
     f.moving = { start: this.time, end: ev.time, from: { ...plan.from }, path: plan.path.map((p) => ({ x: p.x, y: p.y })) };
-    f.nextTurn = ev.time + recovery;
     const where = `(${fmt(plan.dest.x)}, ${fmt(plan.dest.y)})`;
     this.addLog(`${f.name} ${via ? `uses ${via} to fly` : 'moves'} ${fmt(plan.length)} m to ${where} (arrives t=${fmt(ev.time)}).`, '', f.index);
   }
@@ -1262,75 +953,49 @@ export class Game {
     const att = this.fighters[a.attacker];
     const def = this.fighters[this.prompt.fighter];
     const ro = this.reactionOptions();
-
-    if (a.profile.effect === 'pulse') {
-      if (choice !== 'take' && choice !== 'block') return;
-      const m = choice === 'block' ? Math.min(Math.max(0, Math.round(blockBase)), ro.block.maxBase) : 0;
-      if (m > 0) {
-        const cost = m * ro.block.factor;
-        this.spend(def, cost, false);
-        def.nextTurn += R.TIMING.blockDelay;
-        this.addLog(`${def.name} braces against the pulse with ${fmt(cost)} madra (−${fmt(1.5 * m)} strength).`, '', def.index);
-      } else {
-        this.addLog(`${def.name} lets the pulse come.`, 'dim', def.index);
-      }
-      this.prompt = null;
-      this.applyPulse(att, def, a.profile, 1.5 * m);
-      this.advance();
-      return;
-    }
-
-    if (ro.construct) {
-      if (choice !== 'take' && choice !== 'block') return;
-      const c = ro.construct;
-      const m = choice === 'block' ? Math.min(Math.max(0, Math.round(blockBase)), ro.block.maxBase) : 0;
-      if (m > 0) {
-        const cost = m * ro.block.factor;
-        this.spend(def, cost, false);
-        def.nextTurn += R.TIMING.blockDelay;
-        this.addLog(`${def.name} reinforces ${c.name} with ${fmt(cost)} madra (−${fmt(1.5 * m)} damage${a.hits > 1 ? ' on each hit' : ''}).`, '', def.index);
-      } else {
-        this.addLog(`${def.name} leaves ${c.name} to take it.`, 'dim', def.index);
-      }
-      this.prompt = null;
-      this.resolveConstructAttack(att, def, a.profile, c, 1.5 * m);
-      this.advance();
-      return;
-    }
+    const pulse = a.profile.effect === 'pulse';
+    const c = ro.construct;
+    // A pulse or an attack on a construct can only be taken or blocked.
+    if ((pulse || c) && choice !== 'take' && choice !== 'block') return;
+    if (choice === 'redirect' && !ro.redirect.available) return;
+    const dodging = choice === 'dodge' || choice === 'dodgeBlock';
+    const blocking = choice === 'block' || choice === 'dodgeBlock';
+    const m = blocking ? this.blockAmount(ro, blockBase) : 0;
+    const cost = m * ro.block.factor;
+    const payBlock = () => { this.spend(def, cost, false); def.nextTurn += R.TIMING.blockDelay; };
 
     if (choice === 'redirect') {
-      if (!ro.redirect.available) return;
       this.spend(def, ro.redirect.cost, false);
       const back = { ...a.profile, name: `${a.profile.name} (redirected)`, target: '', redirected: true };
       this.events.push({ id: this.nextId++, time: this.time + 1, type: 'resolve', actor: def.index, action: { kind: 'attack', profile: back } });
       this.addLog(`${def.name} catches ${att.name}'s ${a.profile.name} in the Mantle and throws it back (${ro.redirect.cost} madra, lands t=${fmt(this.time + 1)}).`, 'hit', def.index);
-      this.prompt = null;
-      this.advance();
-      return;
-    }
-
-    const dodging = choice === 'dodge' || choice === 'dodgeBlock';
-    const blocking = choice === 'block' || choice === 'dodgeBlock';
-    let blockDR = 0;
-    if (dodging) {
-      def.nextTurn += ro.dodge.delay;
-      this.addLog(a.profile.area
-        ? `${def.name} dodges (−${pct(ro.dodge.reduction)} area damage).`
-        : `${def.name} dodges (+${ro.dodge.bonus} Defense).`, '', def.index);
-    }
-    if (blocking) {
-      const m = Math.min(Math.max(0, Math.round(blockBase)), ro.block.maxBase);
+    } else if (pulse) {
       if (m > 0) {
-        const cost = m * ro.block.factor;
-        this.spend(def, cost, false);
-        blockDR = 1.5 * m;
-        def.nextTurn += R.TIMING.blockDelay;
-        this.addLog(`${def.name} blocks with ${fmt(cost)} madra (−${fmt(blockDR)} damage on ${a.hits > 1 ? `each of ${a.hits} hits` : 'the hit'}).`, '', def.index);
+        payBlock();
+        this.addLog(`${def.name} braces against the pulse with ${fmt(cost)} madra (−${fmt(1.5 * m)} strength).`, '', def.index);
+      } else this.addLog(`${def.name} lets the pulse come.`, 'dim', def.index);
+    } else if (c) {
+      if (m > 0) {
+        payBlock();
+        this.addLog(`${def.name} reinforces ${c.name} with ${fmt(cost)} madra (−${fmt(1.5 * m)} damage${a.hits > 1 ? ' on each hit' : ''}).`, '', def.index);
+      } else this.addLog(`${def.name} leaves ${c.name} to take it.`, 'dim', def.index);
+    } else {
+      if (dodging) {
+        def.nextTurn += ro.dodge.delay;
+        this.addLog(a.profile.area
+          ? `${def.name} dodges (−${pct(ro.dodge.reduction)} area damage).`
+          : `${def.name} dodges (+${ro.dodge.bonus} Defense).`, '', def.index);
       }
+      if (m > 0) {
+        payBlock();
+        this.addLog(`${def.name} blocks with ${fmt(cost)} madra (−${fmt(1.5 * m)} damage on ${a.hits > 1 ? `each of ${a.hits} hits` : 'the hit'}).`, '', def.index);
+      }
+      if (!dodging && !blocking) this.addLog(`${def.name} lets it come.`, 'dim', def.index);
     }
-    if (!dodging && !blocking) this.addLog(`${def.name} lets it come.`, 'dim', def.index);
     this.prompt = null;
-    this.resolveAttack(att, def, a.profile, a.hits, dodging, blockDR);
+    if (pulse) this.applyPulse(att, def, a.profile, 1.5 * m);
+    else if (c) this.resolveConstructAttack(att, def, a.profile, c, 1.5 * m);
+    else if (choice !== 'redirect') this.resolveAttack(att, def, a.profile, a.hits, dodging, 1.5 * m);
     this.advance();
   }
 
@@ -1390,9 +1055,15 @@ export class Game {
   }
 
   breakStance(f, s, reason = 'is broken and drops') {
-    delete f.stances[s.id];
-    f.lockedUntil[s.id] = this.time + R.TIMING.reraiseDelay * R.controlFactor(f.stats.control);
+    this.dropStance(f, s.id);
     this.addLog(`${f.name}'s ${s.name} ${reason}.`, 'warn', f.index);
+  }
+
+  // However a stance comes down (dropped, broken, or out of madra), it can't be raised again
+  // until the re-raise delay passes.
+  dropStance(f, id) {
+    delete f.stances[id];
+    f.lockedUntil[id] = this.time + this.reraiseDelay(f);
   }
 
   // Disruption (Madra Pulse, Oathsign Seal): breaks wind-ups and stances, and constructs if it can.
@@ -1510,8 +1181,7 @@ export class Game {
         for (const def of this.activeStances(f)) {
           const cost = this.upkeepRate(f, def) * step;
           if (f.madra + EPS < cost) {
-            delete f.stances[def.id];
-            f.lockedUntil[def.id] = this.time + R.TIMING.reraiseDelay * R.controlFactor(f.stats.control);
+            this.dropStance(f, def.id);
             this.addLog(`${f.name} runs out of madra; ${def.name} drops.`, 'warn', f.index);
           } else {
             this.spend(f, cost, this.path(f).selfBurn);
@@ -1758,6 +1428,324 @@ export class Game {
     }
     return items.sort((a, b) => a.time - b.time);
   }
+}
+
+// ---------- turn plans, one per kind of action ----------
+// Each takes the game, the acting fighter and { key, t, amount, target, o, spd, tc } (t: the
+// technique, o: the opponent, spd: the fighter's Speed, tc: the construct aimed at, if any) and
+// returns a plan as described at Game.plan.
+const TURN = { turn: true }; // a plan's queue entry for the fighter's next turn
+const notEnough = { enabled: false, reason: 'Not enough madra', lines: [] };
+
+const PLANS = {
+  strike(g, f, { target, spd, tc }) {
+    const prof = { ...g.attackProfile(f, 'strike'), target };
+    const w = R.physTime(R.TIMING.strikeWindup, spd);
+    const gate = tc ? g.constructGate(f, [0], tc, 'Close range only') : g.rangeGate(f, [0], g.time + w, 'Close range only');
+    const lines = [`Wind-up ${fmt(w)} · next turn in ${fmt(w)}`, g.attackLines(f, prof, prof.hits, tc)];
+    if (gate.note) lines.push(gate.note);
+    return {
+      enabled: true, reason: '', warning: gate.warning, lines,
+      nextTurn: g.time + w,
+      queue: [{ time: g.time + w, label: `${prof.name} lands`, type: 'attack' }, TURN],
+      project: (p) => p.hit(prof, prof.hits),
+      apply: () => {
+        g.startWindup(f, w, { kind: 'attack', profile: prof }, 0);
+        g.addLog(`${f.name} winds up a strike${g.aimedAt(f, target)}.`, '', f.index);
+      },
+    };
+  },
+
+  move(g, f, { target, spd }) {
+    const plan = g.planMove(f, target);
+    if (plan.error) return { enabled: false, reason: plan.error, lines: [`${fmt(R.TIMING.moveRate * (spd / 100) ** 2)} m per tick at your Speed, around obstacles`] };
+    const w = R.moveTime(plan.length, spd);
+    return {
+      enabled: true, reason: '', lines: g.moveLines(f, plan, w, w),
+      nextTurn: g.time + w,
+      queue: [{ time: g.time + w, label: `arrives (${fmt(plan.length)} m)`, type: 'move' }, TURN],
+      path: { who: f.index, from: plan.from, path: plan.path },
+      apply: () => g.startMove(f, plan, w),
+    };
+  },
+
+  wait(g, f, { amount }) {
+    const t = clampWait(amount);
+    return {
+      enabled: true, reason: '', lines: [`Next turn in ${fmt(t)}`],
+      nextTurn: g.time + t,
+      queue: [TURN],
+      apply: () => g.addLog(`${f.name} waits ${fmt(t)} ticks.`, 'dim', f.index),
+    };
+  },
+
+  drop(g, f, { key }) {
+    const def = g.tech(f, key.slice(5));
+    return {
+      enabled: true, reason: '', free: true,
+      lines: [`Free. Can be raised again after ${fmt(g.reraiseDelay(f))} ticks${def.buildUp ? '; build-up is lost' : ''}`],
+      apply: () => {
+        g.dropStance(f, def.id);
+        g.addLog(`${f.name} drops ${def.name}.`, '', f.index);
+      },
+    };
+  },
+
+  stance(g, f, { t }) {
+    const locked = f.lockedUntil[t.id] && f.lockedUntil[t.id] > g.time + EPS;
+    const w = g.twind(t, R.TIMING.stanceWindup, f.stats.control);
+    const enough = f.madra >= t.raiseCost;
+    return {
+      enabled: !locked && enough,
+      reason: locked ? `Can be raised again at t=${fmt(f.lockedUntil[t.id])}` : !enough ? 'Not enough madra' : '',
+      lines: [
+        `Costs ${t.raiseCost} madra · wind-up ${fmt(w)} · next turn in ${fmt(w)}`,
+        `Upkeep ${fmt(t.upkeep * R.controlFactor(f.stats.control))} madra per tick${t.buildUp ? ', rising with build-up' : ''}`,
+      ],
+      cost: t.raiseCost,
+      nextTurn: g.time + w,
+      queue: [{ time: g.time + w, label: `${t.name} is up`, type: 'stance' }, TURN],
+      apply: () => {
+        g.startWindup(f, w, { kind: 'stance', id: t.id }, t.raiseCost);
+        g.addLog(`${f.name} begins raising ${t.name} (${t.raiseCost} madra).`, '', f.index);
+      },
+    };
+  },
+
+  launch(g, f, { t, target }) {
+    const plan = g.planMove(f, target, { reach: g.launchReach(t), flight: true });
+    const enough = f.madra >= t.fixedCost;
+    const head = `Costs ${t.fixedCost} madra · flies up to ${fmt(g.launchReach(t))} m in a straight line in ${fmt(t.travel)} ticks`;
+    if (plan.error) return { enabled: false, reason: plan.error, lines: [head] };
+    return {
+      enabled: enough, reason: enough ? '' : 'Not enough madra',
+      lines: [head, ...g.moveLines(f, plan, t.travel, t.travel + t.recovery)],
+      cost: t.fixedCost,
+      nextTurn: g.time + t.travel + t.recovery,
+      queue: [{ time: g.time + t.travel, label: `lands (${fmt(plan.length)} m)`, type: 'move' }, TURN],
+      path: { who: f.index, from: plan.from, path: plan.path },
+      apply: () => g.startMove(f, plan, t.travel, t.name),
+    };
+  },
+
+  // Dropping Crown stars: biggest first, as one attack with a hit per star.
+  command(g, f, { amount, o }) {
+    const stars = g.stars(f).sort((a, b) => b.madra - a.madra);
+    if (!stars.length) return { enabled: false, reason: 'No stars forged', lines: [] };
+    const n = Math.min(Math.max(1, Math.round(amount) || stars.length), stars.length);
+    const chosen = stars.slice(0, n);
+    const after = chosen.map((c) => g.hitResult(f, o, g.starProfile(f, c.madra)).dmg);
+    const chance = g.hitChance(f, o, g.starProfile(f, chosen[0].madra));
+    const land = g.time + STAR.dropTime;
+    return {
+      enabled: true, reason: '',
+      lines: [
+        `Drops ${n} of ${stars.length} star(s), biggest first · they land t=${fmt(land)} · next turn then`,
+        `${chosen.map((c) => c.madra).join(' + ')} madra: ${after.join(' + ')} spirit damage after reduction · ${pct(chance)} to hit each`,
+      ],
+      nextTurn: land,
+      queue: [{ time: land, label: `${n} star(s) land`, type: 'attack' }, TURN],
+      project: (p) => {
+        for (const d of after) p.add(o.index, 'spirit', -d);
+        p.out.notes[o.index] = 'if every star hits';
+      },
+      apply: () => {
+        f.constructs = f.constructs.filter((c) => !chosen.includes(c));
+        const profile = { ...g.starsProfile(f, chosen.map((c) => c.madra)), target: '' };
+        g.events.push({ id: g.nextId++, time: land, type: 'resolve', actor: f.index, action: { kind: 'attack', profile } });
+        g.addLog(`${f.name} drops ${n} star${n > 1 ? 's' : ''} from the Crown (${chosen.map((c) => c.madra).join(', ')} madra; landing t=${fmt(land)}).`, '', f.index);
+      },
+    };
+  },
+
+  pulse(g, f, { t, amount, o }) {
+    if (g.maxMadra(f, t) < t.minMadra) return notEnough;
+    const madra = g.madraFor(f, t, amount);
+    const w = g.twind(t, R.nominalWindup(madra, t.divisor), f.stats.control);
+    const gate = g.rangeGate(f, t.ranges, g.time + w, 'Out of range (Close)');
+    const targets = g.pulseTargets(o, madra, t.ranges);
+    const lines = [
+      `Wind-up ${fmt(w)} (lands t=${fmt(g.time + w)}) · next turn in ${fmt(w)}`,
+      `Cancels ${o.name}'s wind-ups, stances and constructs costing up to ${fmt(madra / 2)} · no roll`,
+      targets.length ? `Right now: ${targets.map((x) => `${x.name} (${fmt(x.cost)})`).join(', ')}` : `Nothing of ${o.name}'s is that cheap right now`,
+      `${o.name} can block it at double cost: each point takes 1.5 off its strength`,
+    ];
+    if (gate.note) lines.push(gate.note);
+    return {
+      enabled: true, reason: '', warning: gate.warning, lines,
+      cost: madra,
+      nextTurn: g.time + w,
+      queue: [{ time: g.time + w, label: `${t.name} lands`, type: 'attack' }, TURN],
+      project: (p) => {
+        p.out.notes[o.index] = targets.length ? `unless blocked: ${targets.map((x) => x.name).join(', ')} break` : 'nothing cheap enough to break';
+      },
+      apply: () => {
+        g.startWindup(f, w, { kind: 'pulse', id: t.id, profile: g.pulseProfile(f, t, madra) }, madra);
+        g.addLog(`${f.name} winds up ${t.name} with ${madra} madra (lands t=${fmt(g.time + w)}).`, '', f.index);
+      },
+    };
+  },
+
+  disrupt(g, f, { t, o }) {
+    const enough = f.madra >= t.fixedCost;
+    const w = g.twind(t, t.windup, f.stats.control);
+    const bands = t.ranges.map((r) => R.RANGES[r]).join('/');
+    const gate = g.rangeGate(f, t.ranges, g.time + w, `Out of range (${bands})`);
+    const prof = g.disruptProfile(f, t);
+    const lines = [`Costs ${t.fixedCost} madra · wind-up ${fmt(w)} (lands t=${fmt(g.time + w)}) · next turn in ${fmt(w)}`];
+    lines.push(t.area
+      ? `Breaks ${o.name}'s wind-ups, stances${t.destroysConstructs ? ' and constructs' : ''} at ${bands} range · no roll`
+      : `If it hits, breaks ${o.name}'s wind-ups and stances · ${g.hitText(f, o, prof)}`);
+    if (gate.note) lines.push(gate.note);
+    return {
+      enabled: enough, reason: enough ? '' : 'Not enough madra', warning: gate.warning, lines,
+      cost: t.fixedCost,
+      nextTurn: g.time + w,
+      queue: [{ time: g.time + w, label: `${t.name} lands`, type: 'attack' }, TURN],
+      project: (p) => { p.out.notes[o.index] = t.area ? 'wind-ups, stances and constructs break' : 'if it hits: wind-ups and stances break'; },
+      apply: () => {
+        g.startWindup(f, w, { kind: 'disrupt', id: t.id, profile: prof }, t.fixedCost);
+        g.addLog(`${f.name} winds up ${t.name} (lands t=${fmt(g.time + w)}).`, '', f.index);
+      },
+    };
+  },
+
+  // A ring construct Forged on yourself (Oathsign: Accelerate).
+  ring(g, f, { t }) {
+    const enough = f.madra >= t.fixedCost;
+    const w = g.twind(t, t.windup, f.stats.control);
+    const n = g.rings(f).length;
+    const strike = g.attackProfile(f, 'strike').damage;
+    return {
+      enabled: enough, reason: enough ? '' : 'Not enough madra',
+      lines: [
+        `Costs ${t.fixedCost} madra · ring forms at t=${fmt(g.time + w)} · next turn then`,
+        `Speed ${fmt(g.speed(f))} → ${fmt(g.speed(f, t.speedBonus))}, melee damage +${t.meleeBonus} (strike ${fmt(strike)} → ${fmt(strike + t.meleeBonus)})${n ? ` · ${n + 1} rings` : ''}`,
+        `Ring HP ${t.fixedCost}, on you: it can be targeted, and area attacks hit it`,
+      ],
+      cost: t.fixedCost,
+      nextTurn: g.time + w,
+      queue: [{ time: g.time + w, label: `${t.ringName} forms`, type: 'construct' }, TURN],
+      project: (p) => { p.out.notes[f.index] = `+${t.speedBonus} Speed and +${t.meleeBonus} melee damage once it forms`; },
+      apply: () => {
+        g.startWindup(f, w, { kind: 'ring', id: t.id }, t.fixedCost, { label: t.ringName });
+        g.addLog(`${f.name} begins Forging an ${t.ringName} (${t.fixedCost} madra; forms t=${fmt(g.time + w)}).`, '', f.index);
+      },
+    };
+  },
+
+  // Forging one Crown star: it forms over its wind-up while you keep acting.
+  forge(g, f, ctx) {
+    const s = scaled(g, f, ctx);
+    if (!s) return notEnough;
+    const { t, o } = ctx;
+    const { madra, w } = s;
+    const sp = g.starProfile(f, madra);
+    return {
+      enabled: true, reason: '',
+      lines: [
+        `Star forms at t=${fmt(g.time + w)} (${fmt(w)} ticks) · next turn in ${fmt(STAR.forgeRecovery)} (keep acting while it forms)`,
+        `When dropped: ${fmt(sp.damage)} spiritual (${g.hitResult(f, o, sp).dmg} after ${o.name}'s reduction) · star HP ${fmt(madra * (t.sizeMult || 1))}, high overhead (Far)`,
+      ],
+      cost: s.cost,
+      nextTurn: g.time + STAR.forgeRecovery,
+      queue: [TURN, { time: g.time + w, label: `star (${madra}) forms`, type: 'construct' }],
+      apply: () => {
+        g.startWindup(f, w, { kind: 'forged', id: t.id, madra }, madra, { label: `Crown star (${madra})` });
+        g.addLog(`${f.name} begins Forging a ${madra}-madra star (forms t=${fmt(g.time + w)}).`, '', f.index);
+      },
+    };
+  },
+
+  // A Forged barrier: it builds piece by piece while you keep acting.
+  construct(g, f, ctx) {
+    const s = scaled(g, f, ctx);
+    if (!s) return notEnough;
+    const { t } = ctx;
+    const { madra, w } = s;
+    const pieces = g.forgePieces(t, madra);
+    const barrier = g.barrier(f);
+    return {
+      enabled: true, reason: '',
+      lines: [
+        `Builds over ${fmt(w)} ticks, one piece every ${fmt(w / pieces.length)} · next turn in ${fmt(R.TIMING.actWhileBuilding)} (Forger: act while it builds)`,
+        `Barrier HP +${fmt(madra * 2 * (t.sizeMult || 1))}${barrier ? ` (now ${fmt(barrier.hp)})` : ''}, filling in as it builds`,
+      ],
+      cost: s.cost,
+      nextTurn: g.time + R.TIMING.actWhileBuilding,
+      queue: [TURN, ...pieces.map((pc, i) => ({ time: g.time + w * ((i + 1) / pieces.length), label: `barrier piece ${i + 1}/${pieces.length} forms`, type: 'construct' }))],
+      apply: () => {
+        g.startForge(f, t, w, madra);
+        g.addLog(`${f.name} begins Forging ${t.name} with ${madra} madra (complete at t=${fmt(g.time + w)}).`, '', f.index);
+      },
+    };
+  },
+
+  // A damaging technique: single-target (rolled) or an area (no roll).
+  attack(g, f, ctx) {
+    const s = scaled(g, f, ctx);
+    if (!s) return notEnough;
+    const { key, t, target, o, tc } = ctx;
+    const { madra, w, cost, timing } = s;
+    const prof = { ...g.attackProfile(f, key, madra), target };
+    const nextTurn = g.time + (t.ruler ? R.TIMING.actWhileBuilding : w);
+    const queue = [TURN, { time: g.time + w, label: `${t.name} lands`, type: 'attack' }];
+    const notes = g.attackNotes(f, t, prof, madra);
+    const start = (aimedText) => {
+      g.startWindup(f, w, { kind: 'attack', profile: prof }, cost, { boostPerMadra: t.boostPerMadra || 0 });
+      g.addLog(`${f.name} winds up ${t.name} with ${madra} madra${aimedText} (lands t=${fmt(g.time + w)}).`, '', f.index);
+    };
+    if (prof.area) {
+      const err = g.aimArea(f, prof, target);
+      if (err) return { enabled: false, reason: err, lines: [timing, `Radius ${fmt(prof.radius)} m; pick its centre on the field`] };
+      const gate = g.areaGate(f, prof, g.time + w);
+      const ac = prof.aimAt ? tc : null;
+      const lines = [timing, g.areaLine(f, prof), ac ? `${g.constructDamage(prof)} damage to ${ac.name}` : g.attackLines(f, prof, g.hitsAgainst(f, o, prof), tc)];
+      if (gate.note) lines.push(gate.note);
+      return {
+        enabled: true, reason: '', warning: gate.warning, lines: [...lines, ...notes],
+        cost, nextTurn, queue,
+        project: (p) => {
+          const l = g.areaLands(f, prof, g.time + w);
+          if (l.centre) p.out.area = { who: f.index, centre: l.centre, radius: prof.radius };
+          if (prof.aimAt) p.out.notes[o.index] = 'aimed at a construct';
+          else if (l.ok) {
+            const hits = g.hitsAgainst(f, o, prof);
+            const res = g.hitResult(f, o, prof);
+            p.add(o.index, res.track, -res.dmg * hits);
+            p.out.notes[o.index] = `${hits > 1 ? `${hits} hits, ` : ''}no roll`;
+          } else p.out.notes[o.index] = `missed: ${l.why}`;
+        },
+        apply: () => {
+          const r = `radius ${fmt(prof.radius)} m`;
+          start(prof.aim === 'set' ? ` at (${fmt(prof.centre.x)}, ${fmt(prof.centre.y)}), ${r}`
+            : prof.aim === 'release' ? `${g.aimedAt(f, target) || ` at ${o.name}`}, ${r}`
+              : `, reaching ${fmt(prof.radius)} m around them`);
+        },
+      };
+    }
+    const rangeText = `Out of range (${prof.ranges.map((r) => R.RANGES[r]).join('/')})`;
+    const gate = tc ? g.constructGate(f, prof.ranges, tc, rangeText) : g.rangeGate(f, prof.ranges, g.time + w, rangeText);
+    const lines = [timing, g.attackLines(f, prof, tc ? 1 : g.hitsAgainst(f, o, prof), tc)];
+    if (gate.note) lines.push(gate.note);
+    return {
+      enabled: true, reason: '', warning: gate.warning, lines: [...lines, ...notes],
+      cost, nextTurn, queue,
+      project: (p) => p.hit(prof, g.hitsAgainst(f, o, prof)),
+      apply: () => start(g.aimedAt(f, target)),
+    };
+  },
+};
+
+// The shared part of techniques that scale with madra (stars, barriers, attacks): the madra
+// used, its wind-up, what it costs, and the timing line. Null if there isn't enough madra.
+function scaled(g, f, { t, amount }) {
+  if (g.maxMadra(f, t) < (t.minMadra || 1)) return null;
+  const madra = g.madraFor(f, t, amount);
+  const w = g.twind(t, R.nominalWindup(madra, t.divisor), f.stats.control);
+  const next = t.ruler ? R.TIMING.actWhileBuilding : w;
+  const timing = `${t.costMult ? `Costs ${fmt(madra * t.costMult)} madra · ` : ''}Wind-up ${fmt(w)} (lands t=${fmt(g.time + w)}) · next turn in ${fmt(next)}${t.ruler ? ' (Ruler: act while it builds)' : ''}`;
+  return { madra, w, cost: madra * (t.costMult || 1), timing };
 }
 
 export { fmt, pct };
