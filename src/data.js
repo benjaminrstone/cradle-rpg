@@ -57,8 +57,8 @@ export const PATHS = {
       },
       {
         id: 'voidDragonsDance', name: "Void Dragon's Dance", kind: 'attack', type: 'Ruler',
-        divisor: 2, toHit: 0, ranges: [0, 1], area: true, radius: 4, radiusPerMadra: 0.5, boostPerMadra: 1, ruler: true,
-        desc: 'Finisher: a long build-up, then a wide blast. Ruler: no channel cap, and your next turn comes 1.5 ticks after you start, so you keep acting while it builds. Area attack centred on you, no roll: a blast that hits everything within 4 m + 0.5 m per madra of you (up to 14 m) that it can reach in a straight line, so cover shelters from it. +1 damage per Black Flame madra you spend while it winds up.',
+        divisor: 2, toHit: 0, ranges: [0, 1], area: true, radius: 4, radiusPerMadra: 0.5, boostPerMadra: 1, ruler: true, fills: true,
+        desc: 'Finisher: a long build-up, then a wide blast. Ruler: no channel cap, and your next turn comes 1.5 ticks after you start, so you keep acting while it builds. Area attack centred on you, no roll: the fire and destruction aura around you ignites, hitting everything within 4 m + 0.5 m per madra of you (up to 14 m), behind cover or not. +1 damage per Black Flame madra you spend while it winds up.',
       },
     ],
   },
