@@ -434,6 +434,8 @@ function reactionModel() {
   const rollOf = (o) => (prof.area || kind === 'pulse' || kind === 'disrupt' ? '' : o.chances && o.chances.length > 1 ? `${o.chances.map(pct).join(' / ')} · ` : `${pct(o.chance)} · `);
   const costOf = (o) => [o.madraCost ? `${fmt(o.madraCost)} madra` : '', o.delay ? `+${fmt(o.delay)} ticks` : ''].filter(Boolean).join(', ') || 'free';
 
+  // Would this outcome drop the defender's health or spirit to 0?
+  const fatalOf = (o) => kind === 'attack' && o.total > 0 && (o.track === 'spirit' ? def.spirit : def.health) - o.total <= 0;
   const tiles = [{ name: 'Take it', o: outcome(false, 0) }];
   if (canDodge) tiles.push({ name: 'Dodge', o: outcome(true, 0) });
   if (canBlock) tiles.push({ name: `${kind === 'construct' ? 'Reinforce' : 'Block'} ${blockAt}`, o: outcome(false, blockAt), note: zero == null ? 'most you can' : '' });
@@ -485,7 +487,10 @@ function reactionModel() {
     if (o.escapes) lines.push('<span class="ok">The sidestep takes you out of it</span>');
     const soaks = [o.absorbed ? `barrier soaks ${fmt(o.absorbed)}` : '', o.blocked ? `block soaks ${fmt(o.blocked)}` : ''].filter(Boolean);
     if (soaks.length) lines.push(soaks.join(' · ').replace(/^./, (c) => c.toUpperCase()));
-    if (o.breaksStances) lines.push('<span class="bad">Breaks your stances and wind-ups</span>');
+    // A hit that empties health or spirit ends the fight: say so first, and skip the threshold news.
+    const fatal = o.total > 0 && cur - o.total <= 0;
+    if (fatal) lines.push(`<span class="bad"><b>Takes you out:</b> ${track.toLowerCase()} to 0${prof.area ? '' : ` if ${o.hits > 1 ? 'all hit' : 'it hits'}`}</span>`);
+    else if (o.breaksStances) lines.push('<span class="bad">Breaks your stances and wind-ups</span>');
     else if (o.interrupts && defWindups.length) lines.push(`<span class="bad">Over your threshold (${fmt(game.threshold(def))}): breaks your wind-ups</span>`);
     else if (defWindups.length) lines.push(`<span class="ok">Under your threshold (${fmt(game.threshold(def))}): ${defWindups.map((w) => w.label).join(', ')} still lands</span>`);
   }
@@ -511,7 +516,7 @@ function reactionModel() {
 
   return {
     att, def, prof, kind, facts, subtitle, canDodge, canBlock, dodgeText, blockText, maxBlock: ro.block.maxBase,
-    tiles: tiles.map((t) => ({ ...t, cost: costOf(t.o), result: `${rollOf(t.o)}${dmgOf(t.o)}` })),
+    tiles: tiles.map((t) => ({ ...t, cost: costOf(t.o), result: `${rollOf(t.o)}${dmgOf(t.o)}${fatalOf(t.o) ? ' · <span class="bad">takes you out</span>' : ''}` })),
     current: { ...o, big, lines, label }, extra,
   };
 }

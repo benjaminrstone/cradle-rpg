@@ -251,7 +251,7 @@ function drawHoverAt(arena) {
     g.appendChild(svg('circle', { class: `area aim${spot.error ? ' bad' : ''}`, cx: view.hoverAt.x, cy: view.hoverAt.y, r: prof.radius }));
     tip.classList.toggle('bad', !!spot.error);
     if (spot.error) { tip.textContent = spot.error; return; }
-    const k = game.areaCatch(spot.centre, prof.radius, game.pos(o));
+    const k = game.areaCatch(spot.centre, prof.radius, game.pos(o), prof.fills);
     tip.textContent = `${fmt(spot.dist)} m away · ${fmt(prof.radius)} m radius · ${o.name} ${k.inside ? 'inside' : k.outside ? 'outside' : `behind a ${k.blockedBy.name}`} now`;
     hoverValue = A.pointText(view.hoverAt);
     return;

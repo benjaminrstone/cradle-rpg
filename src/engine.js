@@ -260,7 +260,9 @@ export class Game {
   //   circle, aim set:  centred on a spot picked when it starts, within reach, in sight;
   //   line:             a beam from where the attacker stands when it starts, toward a point
   //                     picked then; it stops at the first obstacle or wall.
-  // Circles grow with madra up to AREA_MAX and need a clear line from their centre; lines grow in
+  // A circle either emanates from its centre, so cover shelters you from it, or fills its area
+  // (`fills`: Endless Sword's resonance, a gas cloud) and reaches behind cover too.
+  // Circles grow with madra up to AREA_MAX; lines grow in
   // length up to LINE_MAX and have a fixed width. An area with `zone` stays where it formed for a
   // while and pulses (see zones below) instead of landing once.
   areaRadius(t, madra) {
@@ -273,7 +275,7 @@ export class Game {
     if (t.shape === 'line') {
       return { shape: 'line', aim: 'line', length: Math.min(A.LINE_MAX, (t.length ?? 6) + (t.lengthPerMadra ?? 1) * madra), width: t.width ?? 1.5, ...zone };
     }
-    return { shape: 'circle', aim: t.aim === 'set' ? 'set' : 'self', radius: this.areaRadius(t, madra), ...zone };
+    return { shape: 'circle', aim: t.aim === 'set' ? 'set' : 'self', radius: this.areaRadius(t, madra), fills: !!t.fills, ...zone };
   }
 
   // Fill in where an area is aimed: the centre of a circle set at a point, or the direction of a
@@ -330,13 +332,13 @@ export class Game {
   // { shape: 'line', from, to, width }.
   areaShape(f, prof, t = this.time) {
     if (prof.shape === 'line') return { shape: 'line', from: prof.origin, to: prof.end, width: prof.width };
-    return { shape: 'circle', centre: this.areaCentre(f, prof, t), radius: prof.radius };
+    return { shape: 'circle', centre: this.areaCentre(f, prof, t), radius: prof.radius, fills: !!prof.fills };
   }
 
-  // Is a point inside the circle, with a clear line from its centre?
-  areaCatch(centre, radius, p) {
+  // Is a point inside the circle, with a clear line from its centre (unless it fills its area)?
+  areaCatch(centre, radius, p, fills = false) {
     const dist = A.dist(centre, p);
-    const blockedBy = A.blocker(this.arena, centre, p);
+    const blockedBy = fills ? null : A.blocker(this.arena, centre, p);
     return { inside: dist <= radius + EPS && !blockedBy, dist, blockedBy, outside: dist > radius + EPS };
   }
 
@@ -347,7 +349,7 @@ export class Game {
       const reach = shape.width / 2 + A.RADIUS;
       return { inside: s.dist <= reach + EPS, dist: s.dist, outside: s.dist > reach + EPS, blockedBy: null, side: s.side };
     }
-    return this.areaCatch(shape.centre, shape.radius, p);
+    return this.areaCatch(shape.centre, shape.radius, p, shape.fills);
   }
 
   // Would an area attack landing at time t catch the opponent?
@@ -383,7 +385,7 @@ export class Game {
     for (const c of [...def.constructs]) {
       if (c.kind === 'barrier') continue;
       const p = this.constructPos(def, c);
-      const ok = shape ? this.inArea(shape, p).inside && !(shape.shape === 'line' && p.z) : prof.radius != null ? this.areaCatch(from, prof.radius, p).inside : this.reaches(prof, from, p);
+      const ok = shape ? this.inArea(shape, p).inside && !(shape.shape === 'line' && p.z) : prof.radius != null ? this.areaCatch(from, prof.radius, p, prof.fills).inside : this.reaches(prof, from, p);
       if (ok) this.damageConstruct(def, c, this.constructDamage(prof) * hits, prof.name);
     }
   }

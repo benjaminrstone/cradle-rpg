@@ -20,12 +20,14 @@ const AREA_KNOBS = [
   pick('aim', 'Aim', [['self', 'Around you'], ['set', 'Set at a point']], 'self'),
   num('radius', 'Radius (m)', 1, 8, 0.5, 4),
   num('radiusPerMadra', 'Radius per madra (m)', 0, 1, 0.05, 0.5),
+  bool('fills', 'Fills its area (cover doesn\u2019t help)'),
 ];
-const areaFields = (k) => ({ aim: k.aim === 'set' ? 'set' : undefined, radius: k.radius, radiusPerMadra: k.radiusPerMadra });
+const areaFields = (k) => ({ aim: k.aim === 'set' ? 'set' : undefined, radius: k.radius, radiusPerMadra: k.radiusPerMadra, fills: k.fills || undefined });
 const areaText = (k) => {
   const size = `${k.radius} m${k.radiusPerMadra ? ` + ${k.radiusPerMadra} m per madra` : ''}`;
-  if (k.aim === 'set') return `set at a spot you pick, ${span(k.minRange, k.maxRange)} from you and in sight: everything within ${size} of it (up to 14 m), wherever anyone moves`;
-  return `centred on you: everything within ${size} of you (up to 14 m)`;
+  const cover = k.fills ? ', behind cover too' : ' that it reaches in a straight line';
+  if (k.aim === 'set') return `set at a spot you pick, ${span(k.minRange, k.maxRange)} from you and in sight: everything within ${size} of it (up to 14 m)${cover}, wherever anyone moves`;
+  return `centred on you: everything within ${size} of you (up to 14 m)${cover}`;
 };
 
 // Each template: what it is, its knobs, and how knobs become technique fields and a description.
@@ -50,7 +52,7 @@ export const TEMPLATES = {
   },
   zone: {
     label: 'Zone (lingering Ruler field)', type: 'Ruler',
-    knobs: [DTYPE, num('effMult', 'Damage ×', 0, 1.4, 0.05, 1), MIN_R(0), MAX_R(1), ...AREA_KNOBS,
+    knobs: [DTYPE, num('effMult', 'Damage ×', 0, 1.4, 0.05, 1), MIN_R(0), MAX_R(1), ...AREA_KNOBS.map((x) => (x.key === 'fills' ? { ...x, def: true } : x)),
       num('duration', 'Lasts (ticks)', 2, 16, 1, 8), num('every', 'Pulses every (ticks)', 1, 8, 1, 4), num('slowPerMadra', 'Slow per madra (%)', 0, 5, 0.5, 0)],
     make: (k) => ({ kind: 'attack', divisor: 2, area: true, ruler: true, dtype: k.dtype === 'spiritual' ? 'spiritual' : undefined, effMult: k.effMult, ranges: rangeList(k.minRange, k.maxRange), ...areaFields(k), zone: { duration: k.duration, every: k.every, slowPerMadra: k.slowPerMadra / 100 } }),
     describe: (k) => `A field that settles ${areaText(k)} after its wind-up and stays ${k.duration} ticks, pulsing when it forms and every ${k.every} after${k.effMult > 0 ? ` (its pulses together deal 1.5× an area attack${k.effMult !== 1 ? `, × ${k.effMult}` : ''})` : ' (no damage)'}${k.slowPerMadra ? `; −${k.slowPerMadra}% Speed per madra to anyone of the opponent's inside (up to 50%)` : ''}. Ruler: no channel cap, and you act again soon while it builds.`,

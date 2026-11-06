@@ -41,7 +41,9 @@ Walking out of Close range of the opponent lets them strike you as you go. They 
 
 ## Area attacks
 
-An area attack doesn't roll, so its counterplay is position: it's fixed in place before the defender can react, it shows on the map while it winds up, and cover blocks it. It hits everything inside it with a clear line from its centre: the opponent and their constructs, never the attacker. Its radius grows with the madra put in, at a rate set by the technique (Endless Sword and Void Dragon's Dance: 4 m + 0.5 m per madra), up to 14 m.
+An area attack doesn't roll, so its counterplay is position: it's fixed in place before the defender can react, and it shows on the map while it winds up. It hits the opponent and their constructs inside it, never the attacker.
+
+Each area either **emanates** from its centre (a blast: Void Dragon's Dance, Madra Pulse), so it only hits what it can reach in a straight line and cover shelters you, or **fills** its area (Endless Sword's resonance, a gas cloud), so it reaches behind cover too. Lines are beams and always stop at the first obstacle. Its radius grows with the madra put in, at a rate set by the technique (Endless Sword and Void Dragon's Dance: 4 m + 0.5 m per madra), up to 14 m.
 
 Where the centre goes depends on the technique's aim:
 

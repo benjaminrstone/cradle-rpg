@@ -58,7 +58,7 @@ export const PATHS = {
       {
         id: 'voidDragonsDance', name: "Void Dragon's Dance", kind: 'attack', type: 'Ruler',
         divisor: 2, toHit: 0, ranges: [0, 1], area: true, radius: 4, radiusPerMadra: 0.5, boostPerMadra: 1, ruler: true,
-        desc: 'Finisher: a long build-up, then a wide blast. Ruler: no channel cap, and your next turn comes 1.5 ticks after you start, so you keep acting while it builds. Area attack centred on you, no roll: hits everything you can see within 4 m + 0.5 m per madra of you (up to 14 m). +1 damage per Black Flame madra you spend while it winds up.',
+        desc: 'Finisher: a long build-up, then a wide blast. Ruler: no channel cap, and your next turn comes 1.5 ticks after you start, so you keep acting while it builds. Area attack centred on you, no roll: a blast that hits everything within 4 m + 0.5 m per madra of you (up to 14 m) that it can reach in a straight line, so cover shelters from it. +1 damage per Black Flame madra you spend while it winds up.',
       },
     ],
   },
@@ -72,8 +72,8 @@ export const PATHS = {
     techniques: [
       {
         id: 'endlessSword', name: 'Endless Sword', kind: 'attack', type: 'Striker / Ruler',
-        divisor: 6, costMult: 1.5, toHit: 0, ranges: [0, 1], area: true, radius: 4, radiusPerMadra: 0.5, bladeHits: true,
-        desc: 'A fast area attack centred on you, no roll: slashes everything you can see within 4 m + 0.5 m per point of power of you (up to 14 m), constructs included. One extra hit per other blade close to the target. Wind-up madra ÷ 6, but it costs 1.5 madra per point of power.',
+        divisor: 6, costMult: 1.5, toHit: 0, ranges: [0, 1], area: true, radius: 4, radiusPerMadra: 0.5, bladeHits: true, fills: true,
+        desc: 'A fast area attack centred on you, no roll: the sword aura around you resonates, slashing everything within 4 m + 0.5 m per point of power of you (up to 14 m), constructs included, behind cover or not. One extra hit per other blade close to the target. Wind-up madra ÷ 6, but it costs 1.5 madra per point of power.',
       },
       {
         id: 'ripplingSword', name: 'Rippling Sword', kind: 'attack', type: 'Striker',
@@ -179,7 +179,7 @@ PATHS.sandviper = {
     },
     {
       id: 'paralyticCloud', name: 'Paralytic Cloud', kind: 'attack', type: 'Ruler',
-      divisor: 2, ruler: true, area: true, aim: 'set', ranges: [0, 1], radius: 3, radiusPerMadra: 0.25,
+      divisor: 2, ruler: true, area: true, aim: 'set', ranges: [0, 1], radius: 3, radiusPerMadra: 0.25, fills: true,
       zone: { duration: 8, every: 4, slowPerMadra: 0.02 },
       desc: 'A Ruler technique that fills the air with toxic green gas. Set it at a spot within 10 m that you can see: after its wind-up it settles there (3 m + 0.25 m per madra) and stays 8 ticks. Anyone of your opponent\u2019s inside is slowed by 2% Speed per madra (up to 50%), and it pulses when it forms and every 4 ticks after. Ruler: no channel cap, and your next turn comes 1.5 ticks after you start.',
     },
