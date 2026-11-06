@@ -7,6 +7,10 @@
 - The Claude sync, used while "Claude plays" is set:
     POST /api/state  the app saves the game state     GET /api/state  Claude's scripts read it
     POST /api/move   Claude's scripts send a move      GET /api/move   the app picks it up
+- Claude through the API (claude_player.py): when the app says Claude plays via the API, the
+  server asks the Claude API for Claude's moves itself.
+    GET /api/claude         whether it can play, and what it's doing
+    POST /api/claude/retry  think again about the current decision
 - POST /api/fight: saves a finished fight's full log to fights/ as Markdown.
 
 Settings (all optional; the defaults suit running it locally):
@@ -15,6 +19,8 @@ Settings (all optional; the defaults suit running it locally):
   sync key     CRADLE_SYNC_KEY, or the file <CRADLE_DATA>/sync.key. When set, the sync and
                fight endpoints need it in an X-Sync-Key header, so the public site can't
                read or drive anyone's game.
+  Claude API   ANTHROPIC_API_KEY, or the file <CRADLE_DATA>/anthropic.key; see
+               claude_player.py for the model and effort settings.
 """
 import datetime
 import functools
@@ -25,7 +31,9 @@ import os
 import re
 import sys
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
+
+from claude_player import AutoPlayer
 
 ROOT = Path(__file__).resolve().parent
 DATA = Path(os.environ.get("CRADLE_DATA") or ROOT)
@@ -43,6 +51,13 @@ def sync_key():
         except OSError:
             key = ""
     return key
+
+
+def write_move(body):
+    write_atomic(DUEL / "move.json", body)
+
+
+PLAYER = AutoPlayer(DATA, write_move)
 
 
 def code_version():
@@ -86,6 +101,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/version":
             self.send_json(json.dumps({"version": code_version()}).encode())
             return
+        if path == "/api/claude":
+            if not self.authorized():
+                self.send_empty(401)
+                return
+            game = parse_qs(urlparse(self.path).query).get("game", [None])[0]
+            self.send_json(json.dumps(PLAYER.status(game)).encode())
+            return
         if path in ("/api/state", "/api/move"):
             if not self.authorized():
                 self.send_empty(401)
@@ -109,11 +131,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = self.route()
-        if path not in ("/api/state", "/api/move", "/api/fight"):
+        if path not in ("/api/state", "/api/move", "/api/fight", "/api/claude/retry"):
             self.send_empty(404)
             return
         if not self.authorized():
             self.send_empty(401)
+            return
+        if path == "/api/claude/retry":
+            PLAYER.retry()
+            self.send_empty(204)
             return
         length = int(self.headers.get("Content-Length", 0))
         if length <= 0 or length > MAX_BODY:
@@ -129,6 +155,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             save_fight(data)
         else:
             write_atomic(DUEL / ("state.json" if path == "/api/state" else "move.json"), body)
+            if path == "/api/state":
+                PLAYER.on_state(data)
         self.send_empty(204)
 
     def log_message(self, fmt, *args):

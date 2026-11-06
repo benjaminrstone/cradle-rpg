@@ -1,6 +1,6 @@
 // pm2 config for the hosted site (cradle.ben-stone.xyz, behind nginx on Ben's EC2 box).
 // Deploys put each release in /srv/cradle/current; data (Claude sync, saved fights, the sync
-// key) lives in /srv/cradle/data and survives deploys.
+// key, the Claude API key) lives in /srv/cradle/data and survives deploys.
 module.exports = {
   apps: [
     {

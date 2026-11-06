@@ -11,7 +11,7 @@ description: Check, roll back, or debug the hosted Cradle Duel site (cradle.ben-
 | pm2 name | `cradle` (python3 `serve.py 3010`) |
 | port | 3010, behind nginx (`/etc/nginx/sites-enabled/cradle`, certbot TLS) |
 | release | `/srv/cradle/current/` (previous release in `/srv/cradle/previous/`) |
-| data | `/srv/cradle/data/`: `.duel/` (Claude sync), `fights/` (saved fights), `sync.key` |
+| data | `/srv/cradle/data/`: `.duel/` (Claude sync), `fights/` (saved fights), `sync.key`, `anthropic.key` (Claude API) |
 
 - SSH alias `sl` reaches the box. Use the Bash tool for ssh.
 - **Read-only checks: run freely.** Anything that changes the box (sudo, nginx, files outside a deploy): give Ben a paste block.
@@ -19,7 +19,7 @@ description: Check, roll back, or debug the hosted Cradle Duel site (cradle.ben-
 
 ## Deploys
 
-A push to `main` touching the app (`index.html`, `styles.css`, `src/**`, `serve.py`, `ecosystem.config.cjs`, the workflow) runs `.github/workflows/deploy.yml`: it checks every module parses, ships a tarball, swaps it in as `current/`, reloads pm2 and polls `127.0.0.1:3010`. A failed health check restores `previous/`. Docs-only pushes don't deploy. Re-run by hand: `gh workflow run deploy.yml`; check with `gh run list --workflow=deploy.yml --limit 3`.
+A push to `main` touching the app (`index.html`, `styles.css`, `src/**`, `serve.py`, `claude_player.py`, the design docs Claude reads, `ecosystem.config.cjs`, the workflow) runs `.github/workflows/deploy.yml`: it checks every module parses, ships a tarball, swaps it in as `current/`, reloads pm2 and polls `127.0.0.1:3010`. A failed health check restores `previous/`. Pushes touching only other files don't deploy. Re-run by hand: `gh workflow run deploy.yml`; check with `gh run list --workflow=deploy.yml --limit 3`.
 
 Secrets on the repo: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY` (the same values as shattered-lands').
 
@@ -48,3 +48,14 @@ python tools/duel_move.py --remote strike
 ```
 
 In the browser, the app asks for the key the first time Ben sets "Claude plays", and remembers it.
+
+## Claude through the API
+
+With "via the API" set, the server plays Claude itself (`claude_player.py`). It needs the `anthropic` package for the user pm2 runs as and the key in `/srv/cradle/data/anthropic.key`. Check it (read-only):
+
+```bash
+ssh sl 'python3 -c "import anthropic; print(anthropic.__version__)"; test -s /srv/cradle/data/anthropic.key && echo key present'
+ssh sl 'pm2 logs cradle --lines 40 --nostream | grep claude'
+```
+
+Each decision logs a `[claude]` line with its time, tokens and cost.

@@ -1,11 +1,13 @@
-// Claude as a player. When a side is handed to Claude, the app saves the board to the dev
+// Claude as a player. When a side is handed to Claude, the app saves the board to the
 // server after every change (.duel/state.json), and applies Claude's moves from /api/move
-// whenever that side has a decision to make.
+// whenever that side has a decision to make. Claude plays either through the API (the server
+// asks the Claude API for each move; see claude_player.py) or from a chat (Claude runs the
+// scripts in tools/).
 import { fmt } from './engine.js';
 import { RANGES } from './rules.js';
 import { BANDS } from './arena.js';
 
-const state = { side: loadSide(), lastMoveId: null, takeOver: null, error: '', poll: null, post: null };
+const state = { side: loadSide(), via: loadVia(), lastMoveId: null, takeOver: null, error: '', poll: null, post: null, api: null };
 let getGame = () => null;
 let rerender = () => {};
 
@@ -16,6 +18,10 @@ function loadSide() {
   } catch {
     return null;
   }
+}
+
+function loadVia() {
+  try { return localStorage.getItem('claudeVia') === 'chat' ? 'chat' : 'api'; } catch { return 'api'; }
 }
 
 function saveSide(v) {
@@ -36,9 +42,24 @@ export function initClaude(gameGetter, render) {
     saveSide(state.side);
     rerender();
   });
+  const via = document.getElementById('claude-via');
+  via.value = state.via;
+  via.addEventListener('change', () => {
+    state.via = via.value === 'chat' ? 'chat' : 'api';
+    state.error = '';
+    state.api = null;
+    try { localStorage.setItem('claudeVia', state.via); } catch { /* storage unavailable */ }
+    rerender();
+  });
   document.addEventListener('click', (e) => {
     if (e.target.closest('[data-takeover]')) {
       state.takeOver = decisionKey(getGame());
+      rerender();
+    }
+    if (e.target.closest('[data-claude-retry]')) {
+      state.error = '';
+      if (state.api) state.api = { ...state.api, error: '', thinking: true };
+      syncFetch('/api/claude/retry', { method: 'POST' }).catch(() => {});
       rerender();
     }
   });
@@ -59,12 +80,23 @@ export function waitingPanel(game) {
     const att = game.fighters[a.attacker];
     incoming = `<div class="incoming theme-${att.theme}"><b>${att.name}'s ${a.profile.name}</b> is landing on ${f.name}${a.hits > 1 ? ` (${a.hits} hits)` : ''}.</div>`;
   }
+  const what = p.kind === 'reaction' ? 'reaction' : 'move';
+  const api = state.via === 'api' ? state.api : null;
+  // Through the API, the server says whether it can play and whether anything went wrong.
+  const trouble = api && (api.problem || (!api.thinking && api.error));
+  const line = state.via === 'chat'
+    ? `Waiting for Claude's ${what} from the chat…`
+    : trouble ? `Claude can't make its ${what} right now.`
+    : `Claude is thinking about its ${what}…`;
+  const spent = api && api.spent != null ? `<p class="muted small">API cost this fight: about $${api.spent.toFixed(2)}</p>` : '';
   return `
     <div class="prompt-title theme-${f.theme}">Claude is playing ${f.name} <span class="muted">t=${fmt(game.time)}</span></div>
     ${incoming}
-    <p class="waiting"><span class="dot"></span>Waiting for Claude's ${p.kind === 'reaction' ? 'reaction' : 'move'}…</p>
+    <p class="waiting">${trouble ? '' : '<span class="dot"></span>'}${line}</p>
     ${state.error ? `<p class="reason">${state.error}</p>` : ''}
-    <button data-takeover class="ghost">Play this one myself</button>`;
+    ${trouble ? `<p class="reason">${api.problem || api.error}</p>` : ''}
+    ${spent}
+    ${trouble && !api.problem ? '<button data-claude-retry>Try again</button> ' : ''}<button data-takeover class="ghost">Play this one myself</button>`;
 }
 
 // Call after every render.
@@ -128,9 +160,22 @@ async function postState(game) {
   } catch { /* server not reachable; try again on the next change */ }
 }
 
+async function pollStatus(game) {
+  try {
+    const r = await syncFetch(`/api/claude?game=${encodeURIComponent(game.id)}`);
+    if (r.status !== 200) return;
+    const api = await r.json();
+    if (JSON.stringify(api) !== JSON.stringify(state.api)) {
+      state.api = api;
+      rerender();
+    }
+  } catch { /* server not reachable; try again next second */ }
+}
+
 async function pollMove() {
   const game = getGame();
   if (!claudeToAct(game)) { stopPolling(); return; }
+  if (state.via === 'api') pollStatus(game);
   let move;
   try {
     const r = await syncFetch('/api/move');
@@ -143,21 +188,43 @@ async function pollMove() {
   state.lastMoveId = move.id;
   const before = decisionKey(game);
   let onlyDraw = true;
+  let why = '';
   for (const a of move.actions || []) {
     if (a.key === 'offerDraw' || a.key === 'withdrawDraw') {
       game.setDrawOffer(state.side, a.key === 'offerDraw');
       continue;
     }
     onlyDraw = false;
-    if (game.prompt.kind === 'reaction') game.react(a.key, a.amount || 0);
-    else if (game.prompt.kind === 'opportunity') game.opportunity(a.key);
-    else if (game.prompt.kind === 'turn') game.act(a.key, a.amount || 0, a.target || '');
+    // Stop at the first action that can't be taken, and say why.
+    why = whyNot(game, a);
+    if (why) break;
+    try {
+      if (game.prompt.kind === 'reaction') game.react(a.key, a.amount || 0);
+      else if (game.prompt.kind === 'opportunity') game.opportunity(a.key);
+      else if (game.prompt.kind === 'turn') game.act(a.key, a.amount || 0, a.target || '');
+    } catch (e) {
+      why = `${a.key}: ${e.message}`;
+      break;
+    }
   }
   const stuck = !onlyDraw && !game.result && decisionKey(game) === before;
   state.error = stuck
-    ? `Claude's move (${(move.actions || []).map((a) => a.key + (a.amount ? ' ' + a.amount : '')).join(', ')}) wasn't valid. Waiting for another.`
+    ? `Claude's move (${(move.actions || []).map((a) => a.key + (a.amount ? ' ' + a.amount : '') + (a.target ? ' @' + a.target : '')).join(', ')}) wasn't valid${why ? `: ${why}` : ''}. Waiting for another.`
     : '';
   rerender();
+}
+
+const REACTIONS = ['take', 'dodge', 'block', 'dodgeBlock', 'redirect'];
+
+// Why an action can't be taken right now, or '' if it can.
+function whyNot(game, a) {
+  if (game.prompt.kind === 'reaction') return REACTIONS.includes(a.key) ? '' : `"${a.key}" isn't a reaction`;
+  if (game.prompt.kind === 'opportunity') return a.key === 'strike' || a.key === 'let' ? '' : 'the choices are strike or let';
+  if (game.prompt.kind !== 'turn') return '';
+  const cur = game.current();
+  if (!game.turnOptions(cur).some((o) => o.key === a.key)) return `there's no option "${a.key}"`;
+  const pv = game.preview(cur, a.key, a.amount || 0, a.target || '');
+  return pv.enabled ? '' : `${a.key}: ${pv.reason || 'not available'}`;
 }
 
 const r1 = (n) => Math.round(n * 10) / 10;
@@ -250,6 +317,8 @@ function snapshot(game) {
     codeVersion: document.documentElement.dataset.codeVersion || null,
     decision: game.decision,
     claudeSide: state.side == null ? null : game.fighters[state.side].name,
+    claudeVia: state.via,
+    lastMoveId: state.lastMoveId,
     claudeToAct: claudeToAct(game),
     drawOffers: game.fighters.filter((f) => game.drawOffers[f.index]).map((f) => f.name),
     error: state.error,

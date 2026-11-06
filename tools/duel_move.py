@@ -49,6 +49,9 @@ def main():
     if not state or not state.get("claudeToAct"):
         print("It isn't Claude's decision right now; move not sent.")
         sys.exit(1)
+    if state.get("claudeVia") == "api":
+        print("The app has Claude playing through the API, so the server makes this move; not sent.")
+        sys.exit(1)
     move = {"id": uuid.uuid4().hex, "gameId": state["gameId"], "decision": state["decision"], "actions": actions}
     send_move(move, remote)
     (DUEL / "handled").write_text(f"{state['gameId']}:{state['decision']}", encoding="utf-8")

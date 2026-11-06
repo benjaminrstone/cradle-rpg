@@ -1,5 +1,7 @@
 # Claude sync files and the hosted site's address and key
 .duel/
+# The sync key and the Claude API key
+*.key
 # Fight records and animation renders stay on this PC
 fights/
 animations/

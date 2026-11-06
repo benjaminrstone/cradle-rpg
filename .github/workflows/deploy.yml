@@ -1,7 +1,8 @@
 name: Deploy
 
 # A push to main that touches the app deploys cradle.ben-stone.xyz (pm2 app "cradle" on the
-# EC2 box shared with shattered-lands and Foundry). Docs-only pushes don't deploy.
+# EC2 box shared with shattered-lands and Foundry). The design docs ship too, because Claude
+# reads them when it plays through the API.
 on:
   push:
     branches: [main]
@@ -10,6 +11,13 @@ on:
       - 'styles.css'
       - 'src/**'
       - 'serve.py'
+      - 'claude_player.py'
+      - 'seed.md'
+      - 'battlefield.md'
+      - 'stats.md'
+      - 'techniques.md'
+      - 'paths.md'
+      - 'traits.md'
       - 'ecosystem.config.cjs'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
@@ -28,10 +36,10 @@ jobs:
       - name: Check the app parses
         run: |
           for f in src/*.js; do node --input-type=module --check < "$f" || { echo "::error file=$f::does not parse"; exit 1; }; done
-          python3 -m py_compile serve.py
+          python3 -m py_compile serve.py claude_player.py
 
       - name: Package release
-        run: tar czf release.tar.gz index.html styles.css src serve.py ecosystem.config.cjs
+        run: tar czf release.tar.gz index.html styles.css src serve.py claude_player.py ecosystem.config.cjs \n            seed.md battlefield.md stats.md techniques.md paths.md traits.md
 
       - name: Upload release to server
         uses: appleboy/scp-action@v1
