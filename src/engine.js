@@ -941,7 +941,7 @@ export class Game {
         damageText: res.map((r) => r.dmg).join(' + '),
         hits,
         delay: R.physTime(R.TIMING.strikeWindup, this.speed(f)),
-        interrupts: res.some((r) => r.interrupts),
+        interrupts: res.some((r) => r.interrupts) && mover.windups.some((w) => !this.isPlainStrike(w)),
       },
     };
   }

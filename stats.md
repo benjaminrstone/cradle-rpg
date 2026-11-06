@@ -82,13 +82,18 @@ Body and Spirit steps are fractions of the stage's typical value, so they scale 
 ### Formulas
 
 - **Hitting:** hit if 2d6 + Precision + the attack's to-hit bonus − range penalty ≥ 6 + Perception + speed modifier. Fast, precise techniques carry a to-hit bonus; slow or clumsy ones a penalty.
-- **Range penalty:** −1 for each range band past the attack's best range.
+- **Range penalty:** −1 for every 4 m (or part of it) past the attack's best distance (battlefield.md).
 - **Speed modifier:** 3 × log₂(defender's Speed ÷ attacker's Speed), rounded to the nearest whole number. About +1 for every 25% faster the defender is, −1 for every 20% slower: +2 one stage up, +3 across a realm jump.
 - **No automatic hits on a roll.** A big enough gap can make a fighter unhittable by rolled attacks.
 - **Area attacks don't roll.** They hit everything inside their circle with a clear line from its centre (battlefield.md). The defender can block, dodge to cut the damage, or be outside the circle when the attack lands.
-- **Dodging:** a dodge adds +2 to Defense plus the speed modifier a second time (minimum +0). It's a physical action, so its time cost also shrinks with Speed. Faster fighters dodge both better and more cheaply. Against an area attack, a dodge can't avoid it but cuts the damage by 15% per point of dodge bonus, up to 90%. Against an attack with several hits, the dodge tapers: full bonus on the first hit, 1 less on each hit after it, down to +0.
-- **Dodge and block together:** a defender can dodge and block the same attack, paying both the dodge's time and the block's madra.
-- **Damage reduction:** Toughness against physical and technique hits; Spirit / 10 against spiritual hits. Comes off every hit. Resistance to one element doesn't help against another.
+- **Three ways to defend.** Every defense is one of three, each paid in a different currency:
+  - **Take it (free):** static defenses only: damage reduction, stances, a barrier.
+  - **Dodge (time):** pushes your next action 2 ticks later (a physical action, so it shrinks with Speed). Against a rolled attack it adds +2 to Defense plus the speed modifier a second time (minimum +0), on every hit. Against an area attack it's a sidestep straight out from the centre, 2 m at Speed 100 (× (Speed / 100)², stopping at walls and obstacles): if that takes you outside the circle or behind cover, the attack misses you; otherwise it lands in full.
+  - **Block (madra):** up to your channel cap. Each madra soaks 1.5 damage, in all, shared by the attack's hits (so blocking several hits costs no more than one big one). Pushes your next action 1 tick later.
+  - A defender can dodge and block the same attack, paying both. A sidestep that gets you out of an area means the block isn't spent.
+  - Some stances add their own option (the Hollow King's Mantle can redirect a technique).
+- **Order of a hit:** Hollow Armor halves technique and spiritual damage; damage reduction comes off; then a barrier soaks what gets through (not spiritual hits), then a block.
+- **Damage reduction:** Toughness against physical and technique hits; Spirit / 10 against spiritual hits. Comes off every hit, so small hits vanish against Guard while a block is insurance against one big hit. Resistance to one element doesn't help against another.
 - **Physical damage:** a base value that scales with stage, changed by iron bodies, weapons, artifacts, and Enforcer techniques. Costs no madra.
 - **Technique damage:** about 1.5–2 damage per point of madra spent.
 - **Interrupts:** a hit interrupts if, after damage reduction, it deals at least 1.6 × Control% of the defender's max Health (8 at Control 5). Spiritual hits count double. It breaks everything the defender is winding up, except plain strikes; an enforced strike drops to a plain strike.
