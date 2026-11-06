@@ -123,8 +123,8 @@ function glide(el, game, f, now) {
 // Build the arena once per layout: the floor grid, obstacles and the layers drawn over them.
 function build(root, game) {
   const { width: W, height: H } = game.arena;
-  root.innerHTML = `<div class="field-head"><span class="section-label">Field</span><span class="field-info"></span></div>
-    <div class="arena" style="aspect-ratio:${W} / ${H}"><div class="arena-tip" hidden></div></div>`;
+  root.innerHTML = `<div class="field-head"><span class="label">${game.arena.name}</span><span class="field-info"></span><span class="rng"></span></div>
+    <div class="arena-wrap"><div class="arena" style="aspect-ratio:${W} / ${H}; --aspect:${W / H}"><div class="arena-tip" hidden></div></div></div>`;
   const arena = root.querySelector('.arena');
   arena.dataset.layout = `${game.arena.name}:areas`;
   const s = svg('svg', { class: 'arena-svg', viewBox: `0 0 ${W} ${H}` });
@@ -223,7 +223,9 @@ export function renderField(game, opts = {}) {
   const pos = game.fighters.map((f) => game.pos(f));
   const sight = game.sight(pos[0], pos[1]);
 
-  root.querySelector('.field-info').textContent = `${game.arena.name} · ${fmt(sight.dist)} m apart · ${RANGES[sight.band]} range${sight.blockedBy ? ` · a ${sight.blockedBy.name} blocks the line` : ''}`;
+  // The range, shown once: the band the fighters are in, with the gap.
+  root.querySelector('.field-info').textContent = sight.blockedBy ? `a ${sight.blockedBy.name} blocks the line between them` : '';
+  root.querySelector('.rng').innerHTML = RANGES.map((r, i) => `<span class="${i === sight.band ? 'on' : ''}">${r}${i === sight.band ? ` · ${fmt(sight.dist)} m` : ''}</span>`).join('');
 
   // Range rings around whoever is acting (or the first fighter between turns).
   const acting = game.prompt && game.prompt.fighter != null ? game.fighters[game.prompt.fighter] : game.fighters[0];

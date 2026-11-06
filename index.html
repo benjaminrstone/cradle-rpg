@@ -9,27 +9,30 @@
 <body>
   <header class="topbar">
     <h1>Cradle Duel</h1>
-    <div id="clock" class="clock"></div>
-    <div id="range" class="range"></div>
     <label class="claude-pick">Fighters
       <select id="pick0"></select> vs <select id="pick1"></select>
     </label>
     <label class="claude-pick">Claude plays
       <select id="claude-side"></select>
     </label>
+    <span class="topbar-gap"></span>
     <button id="restart" class="ghost">Restart</button>
     <button id="open-builder" class="ghost">Builder</button>
   </header>
   <main class="layout">
-    <section id="f0" class="fighter"></section>
-    <section class="center">
+    <section class="board">
+      <div class="vs">
+        <section id="f0" class="panel fp"></section>
+        <section id="f1" class="panel fp"></section>
+      </div>
       <div id="field" class="panel field"></div>
       <div id="queue" class="panel queue"></div>
-      <div id="prompt" class="panel prompt"></div>
     </section>
-    <section id="f1" class="fighter"></section>
+    <section class="side">
+      <div id="prompt" class="panel prompt"></div>
+      <section id="log" class="panel log"></section>
+    </section>
   </main>
-  <section id="log" class="panel log"></section>
   <div id="builder" class="builder" hidden></div>
   <script type="module" src="src/main.js"></script>
 </body>
