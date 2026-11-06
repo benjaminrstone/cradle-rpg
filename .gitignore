@@ -1,8 +1,10 @@
 # Claude sync files and the hosted site's address and key
 .duel/
-# Fight records, animation renders and the Paths spreadsheet stay on this PC
+# Fight records and animation renders stay on this PC
 fights/
 animations/
 *.xlsx
+# The Paths spreadsheet is shared so cloud sessions can read it
+!cradle-techniques-and-paths.xlsx
 __pycache__/
 release.tar.gz
