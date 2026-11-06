@@ -1072,10 +1072,10 @@ export class Game {
     const f = this.fighters[e.actor];
     const o = this.opponent(f);
     const a = e.action;
-    const herThreshold = (res) => (res.breaksStances ? ` · breaks ${o.name}'s stances` : res.interrupts ? ` · breaks ${o.name}'s wind-ups` : '');
+    const breaks = (list) => (list.some((r) => r.breaksStances) ? ` · breaks ${o.name}'s stances` : list.some((r) => r.interrupts) ? ` · breaks ${o.name}'s wind-ups` : '');
     if (a.kind === 'forged') {
       const res = this.hitResult(f, o, this.starProfile(f, a.madra));
-      return `When dropped: ${res.dmg} spirit damage to ${o.name} · ${pct(this.hitChance(f, o, this.starProfile(f, a.madra)))} to hit${herThreshold(res)}`;
+      return `When dropped: ${res.dmg} spirit damage to ${o.name} · ${pct(this.hitChance(f, o, this.starProfile(f, a.madra)))} to hit${breaks([res])}`;
     }
     if (a.kind === 'stance') return `Raises ${this.tech(f, a.id).name}`;
     if (a.kind === 'ring') { const t = this.tech(f, a.id); return `+${t.speedBonus} Speed and +${t.meleeBonus} melee damage for ${f.name}`; }
@@ -1102,8 +1102,7 @@ export class Game {
     const track = each[0].track === 'spirit' ? ' spirit' : '';
     const dmg = boosted.hitDamages || hits > 1 ? `${each.map((r) => r.dmg).join(' + ')}${track} damage` : `${each[0].dmg}${track} damage`;
     const roll = boosted.area ? 'area attack, no roll' : `${pct(this.hitChance(f, o, boosted))} to hit${hits > 1 ? ' each' : ''}`;
-    const breaks = each.some((r) => r.breaksStances) ? ` · breaks ${o.name}'s stances` : each.some((r) => r.interrupts) ? ` · breaks ${o.name}'s wind-ups` : '';
-    return `${dmg} to ${o.name} after reduction · ${roll}${breaks}${out}`;
+    return `${dmg} to ${o.name} after reduction · ${roll}${breaks(each)}${out}`;
   }
 
   // The same, for one of a fighter's wind-ups.
@@ -1253,8 +1252,7 @@ export class Game {
     if (a.kind === 'pulse') {
       const factor = R.blockCostFactor(1) * (profile0.pure ? 2 : 1);
       if (this.pulseTargets(o, profile0.madra, profile0.ranges).length && this.maxMadra(o) >= factor) {
-        this.prompt = { kind: 'reaction', fighter: o.index, attack: { attacker: f.index, profile: profile0, hits: 1 } };
-        this.decision++;
+        this.askReaction(o, { attacker: f.index, profile: profile0, hits: 1 });
         return;
       }
       this.applyPulse(f, o, profile0, 0);
@@ -1278,22 +1276,28 @@ export class Game {
         return;
       }
       if (this.maxMadra(o) >= 1) {
-        this.prompt = { kind: 'reaction', fighter: o.index, attack: { attacker: f.index, profile: profile0, hits: profile0.hits, construct: c.id } };
-        this.decision++;
+        this.askReaction(o, { attacker: f.index, profile: profile0, hits: profile0.hits, construct: c.id });
         return;
       }
       this.resolveConstructAttack(f, o, profile0, c, 0);
       return;
     }
 
-    let profile = profile0;
-    if (boost > 0) {
-      profile = { ...profile, damage: profile.damage + boost };
-      this.addLog(`${f.name}'s ${profile.name} is boosted by ${fmt(boost)} from Black Flame spent while it built up.`, '', f.index);
-    }
-    const hits = this.hitsAgainst(f, o, profile);
-    this.prompt = { kind: 'reaction', fighter: o.index, attack: { attacker: f.index, profile, hits } };
+    const profile = this.boosted(f, profile0, boost);
+    this.askReaction(o, { attacker: f.index, profile, hits: this.hitsAgainst(f, o, profile) });
+  }
+
+  // The defender gets to choose how to react to an attack that is landing.
+  askReaction(def, attack) {
+    this.prompt = { kind: 'reaction', fighter: def.index, attack };
     this.decision++;
+  }
+
+  // A wind-up fed while it built (Void Dragon's Dance and Black Flame) lands with the extra damage.
+  boosted(f, prof, boost) {
+    if (!(boost > 0)) return prof;
+    this.addLog(`${f.name}'s ${prof.name} is boosted by ${fmt(boost)} from Black Flame spent while it built up.`, '', f.index);
+    return { ...prof, damage: prof.damage + boost };
   }
 
   // An area attack lands: find its centre, then hit everything inside with a clear line from it.
@@ -1304,11 +1308,7 @@ export class Game {
       this.addLog(`${f.name}'s ${profile0.name} is wasted: ${l.why}.`, 'miss', f.index);
       return;
     }
-    let profile = { ...profile0, centre: l.centre };
-    if (boost > 0) {
-      profile = { ...profile, damage: profile.damage + boost };
-      this.addLog(`${f.name}'s ${profile.name} is boosted by ${fmt(boost)} from Black Flame spent while it built up.`, '', f.index);
-    }
+    const profile = this.boosted(f, { ...profile0, centre: l.centre }, boost);
     const where = profile.aim === 'self' ? '' : ` at (${fmt(l.centre.x)}, ${fmt(l.centre.y)})`;
     if (!l.ok) {
       this.addLog(`${f.name}'s ${profile.name} lands${where}, but ${l.why}.`, 'miss', f.index);
@@ -1316,9 +1316,7 @@ export class Game {
       this.checkEnd();
       return;
     }
-    const hits = this.hitsAgainst(f, o, profile);
-    this.prompt = { kind: 'reaction', fighter: o.index, attack: { attacker: f.index, profile, hits } };
-    this.decision++;
+    this.askReaction(o, { attacker: f.index, profile, hits: this.hitsAgainst(f, o, profile) });
   }
 
   resolveConstructAttack(att, owner, prof, c, blockDR) {
