@@ -49,8 +49,19 @@ def fighter_line(f):
     for p in f.get("windups", []):
         boost = f", boosted +{p['boost']}" if p.get("boost") else ""
         area = p.get("area")
-        where = f", area {area['radius']} m around ({area['centre']['x']}, {area['centre']['y']}) [{area['aim']}]" if area else ""
+        if not area:
+            where = ""
+        elif area.get("shape") == "line":
+            where = f", a {area['width']} m beam from ({area['from']['x']}, {area['from']['y']}) to ({area['to']['x']}, {area['to']['y']})"
+        else:
+            where = f", area {area['radius']} m around ({area['centre']['x']}, {area['centre']['y']}) [{area.get('aim')}]"
+        if area and area.get("zone"):
+            where += ", a zone that stays and pulses"
         lines.append(f"    winding up: {p['label']} ({p['madra']} madra{boost}{where}), lands t={p['lands']}")
+    for z in f.get("zones", []):
+        sh = z["shape"]
+        where = f"beam ({sh['from']['x']}, {sh['from']['y']})-({sh['to']['x']}, {sh['to']['y']})" if "from" in sh else f"{sh['radius']} m around ({sh['centre']['x']}, {sh['centre']['y']})"
+        lines.append(f"    zone: {z['name']}, {where}, until t={z['until']}" + (f", slows {round(z['slow'] * 100)}% inside" if z.get("slow") else ""))
     if f.get("at"):
         lines.append(f"    at ({f['at']['x']}, {f['at']['y']})")
     if f["moving"]:
@@ -102,7 +113,7 @@ def describe(s):
                 out.append(f"      {line}")
             if o.get("point"):
                 if o["point"].get("area"):
-                    out.append(f"      area centre: @x:y (e.g. {o['key']} @20:12), or @them (the opponent's spot now)")
+                    out.append(f"      aim: @x:y (e.g. {o['key']} @20:12), or @them: the centre of a circle, or the direction of a beam")
                 else:
                     out.append(f"      destination: @x:y (e.g. {o['key']} @12:8), or @toward / @away")
                 for way, w in (o["point"].get("ways") or {}).items():

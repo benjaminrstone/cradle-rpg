@@ -9,7 +9,7 @@ import {
   loadBuilds, saveBuilds, toFighter,
 } from './builds.js';
 
-const THEME = { blackFlame: 'flame', endlessSword: 'sword', hollowKing: 'pure', dawnOath: 'force' };
+const THEME = { blackFlame: 'flame', endlessSword: 'sword', hollowKing: 'pure', dawnOath: 'force', sandviper: 'venom', heavensGlory: 'light' };
 const fmtStep = (n) => (n > 0 ? `+${n}` : `${n}`);
 const clone = (x) => JSON.parse(JSON.stringify(x));
 

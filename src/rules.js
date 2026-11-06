@@ -35,6 +35,12 @@ export const STRIKE_DAMAGE = 10;
 // Area attacks can't miss, so they pay for it in damage.
 export const AREA_EFFICIENCY = 0.75;
 
+// A zone lingers and pulses for its whole life: all its pulses together deal this many times
+// what the same madra would as a one-off area attack. Leaving it early takes less.
+export const ZONE_TOTAL = 1.5;
+// The most a zone can slow those inside it.
+export const ZONE_SLOW_MAX = 0.5;
+
 export function nominalWindup(madra, divisor = 3) {
   return Math.max(1, madra / divisor);
 }

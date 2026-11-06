@@ -50,7 +50,19 @@ Where the centre goes depends on the technique's aim:
 
 The defender can walk out on their turn, or sidestep at the last moment (a dodge), or block. Madra Pulse is a burst around you that reaches Close range.
 
-Still to come: lines (a beam that hits everything along it) and zones (an area that stays for several ticks and does something to whoever is inside), the Ruler's way of reshaping the field.
+### Lines
+
+A line is a beam from where the attacker stands when they start it, toward a point they pick then. Its length grows with madra (Heaven's Lance: 6 m + 1 m per madra, up to 24 m), it has a fixed width (1.5 m), and it stops at the first obstacle or wall. It hits everyone whose body overlaps it. A sidestep out of a line goes sideways, away from its axis.
+
+### Zones
+
+A zone is an area that stays where it formed for a number of ticks: the Ruler's way of reshaping the field. It's visible while it winds up, and it pulses when it forms and every few ticks after:
+
+- **Each pulse** hits whoever of the opponent's is inside then, with no roll and no reaction: damage reduction and barriers apply, a block doesn't. All its pulses together deal 1.5× what a one-off area attack of the same madra would, so standing in it the whole time costs more than one blast, and leaving early costs less.
+- **A slow** cuts the Speed of an opponent standing in it (Paralytic Cloud: 2% per madra, up to 50%), which makes leaving slower too.
+- **Madra Pulse** disperses a zone its user stands in, if the zone cost at most half the pulse's madra.
+
+You can't attack a zone; you leave it, or wait it out.
 
 ## Constructs
 

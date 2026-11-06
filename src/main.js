@@ -2,7 +2,8 @@ import { Game, fmt, pct } from './engine.js';
 import { TRAITS } from './data.js';
 import { allFighters } from './builds.js';
 import { openBuilder } from './builder.js';
-import { parsePoint } from './arena.js';
+import { parsePoint, dist as A_dist } from './arena.js';
+import { reachText } from './rules.js';
 import { renderField } from './field.js';
 import { initClaude, claudeToAct, waitingPanel, syncClaude, claudeSide, syncFetch } from './claude.js';
 
@@ -231,10 +232,10 @@ function renderFighter(f, ghost = null) {
   el.innerHTML = `
     <div class="fp-head"><span class="name">${f.name}</span>${turn}</div>
     <div class="sub">${f.stage} · ${path.name}${extras ? ` · ${extras}` : ''}</div>
+    <div class="thr-key" title="Ticks on the health and spirit bars: one hit that takes you past them breaks your wind-ups (solid) or stances (dotted). Spiritual hits count double."><span>one hit breaks</span><span><i></i>wind-ups ${fmt(thr)}</span><span><i class="st"></i>stances ${fmt(st)}</span></div>
     ${bar('Health', 'health', f.health, f.stats.health, d.health, healthTicks)}
     ${bar('Spirit', 'spirit', f.spirit, f.stats.spirit, d.spirit, spiritTicks)}
     ${bar('Madra', 'madra', f.madra, f.stats.pool, d.madra)}
-    <div class="thr-key"><span><i></i>wind-ups break at ${fmt(thr)}</span><span><i class="st"></i>stances at ${fmt(st)}</span></div>
     ${note ? `<div class="ghost-note">${note}</div>` : ''}
     <div class="chips">${fighterChips(f)}</div>
     <div class="fp-foot">${tabBtn('stats', 'Stats')}${tabBtn('path', 'Path')}${tabBtn('seen', `Seen${seenCount ? ` ${seenCount}` : ''}`)}${drawControl(f)}</div>
@@ -289,7 +290,7 @@ function gistFor(f, o) {
   const pv = game.preview(f, o.key, amount, target);
   if (o.group === 'drop') return { text: `raise again after ${fmt(game.reraiseDelay(f))}`, cost: 'free', pv };
   if ((o.key === 'move' || o.point) && !target && !pv.enabled) {
-    return { text: o.point && o.point.area ? 'pick its centre on the field' : 'click the field · Toward · Away', cost: '', pv, pick: true };
+    return { text: o.point && o.point.line ? 'pick its direction on the field' : o.point && o.point.area ? 'pick its centre on the field' : 'click the field · Toward · Away', cost: '', pv, pick: true };
   }
   if (!pv.enabled) return { text: pv.reason, cost: '', pv, warn: true };
   const pj = game.project(f, o.key, amount, target);
@@ -341,7 +342,7 @@ function pointPicker(f, o) {
   const them = game.opponent(f).name;
   if (o.point.area) {
     const at = p ? `(${fmt(p.x)}, ${fmt(p.y)})` : cur === 'them' ? them : 'click the field, or';
-    return `<div class="point-pick">At <b>${at}</b> <button class="ghost${cur === 'them' ? ' on' : ''}" data-point="${o.key}" data-way="them">On ${them}</button></div>`;
+    return `<div class="point-pick">${o.point.line ? 'Toward' : 'At'} <b>${at}</b> <button class="ghost${cur === 'them' ? ' on' : ''}" data-point="${o.key}" data-way="them">${o.point.line ? 'At' : 'On'} ${them}</button></div>`;
   }
   const shown = p ? `(${fmt(p.x)}, ${fmt(p.y)})` : cur === 'toward' ? `toward ${them}` : cur === 'away' ? `away from ${them}` : 'click the field, or';
   const way = (w, label) => `<button class="ghost${cur === w ? ' on' : ''}" data-point="${o.key}" data-way="${w}">${label}</button>`;
@@ -797,13 +798,60 @@ function fieldOpts(ghost) {
     const mv = game.planMove(f, ui.target.move);
     if (!mv.error) plan = { who: f.index, from: mv.from, path: mv.path };
   }
-  // Clicking the field aims an area set at a point when that row was the last one touched.
-  const aimKey = human && ui.pointCard && game.turnOptions(game.current()).some((o) => o.key === ui.pointCard && o.point && o.point.area) ? ui.pointCard : null;
-  return {
-    picking: human ? p.fighter : null, plan, onPick: pickPoint,
-    area: ghost && ghost.area ? ghost.area : null,
-    aiming: aimKey ? { key: aimKey, amount: ui.amount[aimKey] || 0 } : null,
-  };
+  // What the field does depends on the open row (hovered, or else selected):
+  //   move or Launch: hovering shows the route and a click picks the destination;
+  //   an area set at a point, or a line: hovering shows its shape and a click aims it;
+  //   a targeted attack: its reach, with targets marked in or out, and a click picks the target;
+  //   anything else: no picking. With no row open, a click on the field starts a move.
+  const f = human ? game.current() : null;
+  const key = human ? (ui.hover && ui.hover.key) || ui.selected : null;
+  const opt = key ? game.turnOptions(f).find((o) => o.key === key) : null;
+  const out = { picking: null, plan, onPick: pickPoint, onTarget: pickTarget, area: ghost && ghost.area ? ghost.area : null, aiming: null, reach: null, flight: null };
+  if (!human) return out;
+  if (!opt) return { ...out, picking: p.fighter };
+  if (opt.point && opt.point.area) return { ...out, picking: p.fighter, aiming: { key, amount: ui.amount[key] || 0 } };
+  if (opt.point) {
+    const t = game.tech(f, key);
+    return { ...out, picking: p.fighter, flight: t && t.kind === 'launch' ? { reach: game.launchReach(t), flight: true, travel: t.travel } : null };
+  }
+  const reach = reachFor(f, opt);
+  return reach ? { ...out, picking: p.fighter, reach, plan: null } : { ...out, plan: null };
+}
+
+// A targeted option's reach and the targets it could pick, for the field.
+function reachFor(f, opt) {
+  const t = opt.key === 'strike' ? null : game.tech(f, opt.key);
+  const single = opt.key === 'strike' || (t && ((t.kind === 'attack' && !t.area) || t.kind === 'disrupt' || t.kind === 'pulse'));
+  if (!single) return null;
+  const prof = opt.key === 'strike' ? game.attackProfile(f, 'strike') : t.kind === 'attack' ? game.attackProfile(f, opt.key, ui.amount[opt.key] || 1) : t;
+  const spec = game.specOf(prof);
+  const o = game.opponent(f);
+  const chosen = ui.target[opt.key] || '';
+  const mine = game.pos(f);
+  const targets = [{ id: '', label: o.name, at: game.pos(o), ok: game.reaches(prof, mine, game.pos(o)), chance: t && t.kind === 'pulse' ? null : game.hitChance(f, o, prof) }];
+  if (opt.targets) {
+    for (const c of o.constructs) {
+      if (!opt.targets.some((x) => x.id === c.id)) continue;
+      const cp = game.constructPos(o, c);
+      targets.push({ id: c.id, label: `${o.name}'s ${c.name}`, at: { x: cp.x, y: cp.y - (cp.z ? 1.2 : 0) }, ok: true, chance: game.constructHitChance(f, prof, c) });
+    }
+  }
+  for (const x of targets) {
+    x.chosen = x.id === chosen;
+    if (!x.ok) x.why = `out of reach (${fmt(A_dist(mine, x.at))} m; it reaches ${reachText(spec)})`;
+  }
+  return { key: opt.key, spec, targets };
+}
+
+// Clicking a target on the field while a targeted attack is open.
+function pickTarget(key, id) {
+  const f = game.current();
+  const opt = f && game.turnOptions(f).find((o) => o.key === key);
+  if (!opt) return;
+  if (opt.targets) ui.target[key] = id;
+  ui.selected = key;
+  renderPrompt();
+  renderGhost();
 }
 
 // A destination clicked on the field goes to the selected (or last touched) point option, or

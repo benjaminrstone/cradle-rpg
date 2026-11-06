@@ -2,6 +2,7 @@
 // (see Game.plan in engine.js): the preview, the cost, when the fighter acts next, the ghost
 // queue items, the expected effect on the bars, and what it starts when chosen.
 import * as R from './rules.js';
+import * as A from './arena.js';
 import { fmt, pct } from './format.js';
 
 const EPS = 1e-9;
@@ -142,7 +143,7 @@ export const PLANS = {
     const targets = g.pulseTargets(o, madra, t.ranges);
     const lines = [
       `Wind-up ${fmt(w)} (lands t=${fmt(g.time + w)}) · next turn in ${fmt(w)}`,
-      `Cancels ${o.name}'s wind-ups, stances and constructs costing up to ${fmt(madra / 2)} · no roll`,
+      `Cancels ${o.name}'s wind-ups, stances, constructs and zones (ones you stand in) costing up to ${fmt(madra / 2)} · no roll`,
       targets.length ? `Right now: ${targets.map((x) => `${x.name} (${fmt(x.cost)})`).join(', ')}` : `Nothing of ${o.name}'s is that cheap right now`,
       `${o.name} can block it: each madra takes 1.5 off its strength`,
     ];
@@ -273,17 +274,25 @@ export const PLANS = {
     };
     if (prof.area) {
       const err = g.aimArea(f, prof, target);
-      if (err) return { enabled: false, reason: err, lines: [timing, `Radius ${fmt(prof.radius)} m; pick its centre on the field`] };
+      if (err) return { enabled: false, reason: err, lines: [timing, prof.shape === 'line' ? `A beam up to ${fmt(prof.length)} m long; pick its direction on the field` : `Radius ${fmt(prof.radius)} m; pick its centre on the field`] };
       const gate = g.areaGate(f, prof, g.time + w);
-      const lines = [timing, g.areaLine(f, prof), g.attackLines(f, prof, g.hitsAgainst(f, o, prof))];
+      const z = prof.zone;
+      const pulses = z ? Math.floor(z.duration / z.every + 1e-9) + 1 : 0;
+      const pulseProf = z ? { ...prof, damage: (prof.damage * R.ZONE_TOTAL) / pulses } : null;
+      const lines = [timing, g.areaLine(f, prof), z
+        ? `Stays ${fmt(z.duration)} ticks, pulsing ${pulses} times${pulseProf.damage > 0.05 ? `: ${fmt(pulseProf.damage)} damage each (${g.hitResult(f, o, pulseProf).dmg} after ${o.name}'s reduction)` : ''}${z.slow ? ` · Speed −${pct(z.slow)} inside` : ''}`
+        : g.attackLines(f, prof, g.hitsAgainst(f, o, prof))];
       if (gate.note) lines.push(gate.note);
       return {
         enabled: true, reason: '', warning: gate.warning, lines: [...lines, ...notes],
         cost, nextTurn, queue,
         project: (p) => {
           const l = g.areaLands(f, prof, g.time + w);
-          if (l.centre) p.out.area = { who: f.index, centre: l.centre, radius: prof.radius };
-          if (l.ok) {
+          p.out.area = { who: f.index, shape: l.shape, zone: !!z };
+          if (l.ok && z) {
+            if (pulseProf.damage > 0.05) p.add(o.index, g.hitResult(f, o, pulseProf).track, -g.hitResult(f, o, pulseProf).dmg);
+            p.out.notes[o.index] = `per pulse while inside${z.slow ? `, Speed −${pct(z.slow)}` : ''}`;
+          } else if (l.ok) {
             const hits = g.hitsAgainst(f, o, prof);
             const res = g.hitResult(f, o, prof);
             p.add(o.index, res.track, -res.dmg * hits);
@@ -292,7 +301,8 @@ export const PLANS = {
         },
         apply: () => {
           const r = `radius ${fmt(prof.radius)} m`;
-          start(prof.aim === 'set' ? ` at (${fmt(prof.centre.x)}, ${fmt(prof.centre.y)}), ${r}` : `, reaching ${fmt(prof.radius)} m around them`);
+          start(prof.shape === 'line' ? ` toward (${fmt(prof.end.x)}, ${fmt(prof.end.y)}), a ${fmt(A.dist(prof.origin, prof.end))} m beam`
+            : prof.aim === 'set' ? ` at (${fmt(prof.centre.x)}, ${fmt(prof.centre.y)}), ${r}` : `, reaching ${fmt(prof.radius)} m around them`);
         },
       };
     }

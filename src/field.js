@@ -10,7 +10,7 @@ import { RANGES, moveTime } from './rules.js';
 import * as A from './arena.js';
 
 const NS = 'http://www.w3.org/2000/svg';
-const view = { game: null, picking: null, onPick: null, hoverAt: null, aiming: null };
+const view = { game: null, picking: null, onPick: null, hoverAt: null, aiming: null, reach: null, onTarget: null, flight: null };
 // Per fighter: where the token was last sent, at what game time, and the moves seen so far.
 const trail = new Map();
 const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -45,6 +45,19 @@ function svg(tag, attrs = {}) {
   const el = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
   return el;
+}
+
+// An area's shape on the map: a circle, or a beam drawn as a rectangle along its line.
+function shapeEl(shape, cls) {
+  if (shape.shape === 'line') {
+    const { from, to, width } = shape;
+    const L = Math.hypot(to.x - from.x, to.y - from.y) || 1;
+    const nx = (-(to.y - from.y) / L) * (width / 2);
+    const ny = ((to.x - from.x) / L) * (width / 2);
+    const pts = [[from.x + nx, from.y + ny], [to.x + nx, to.y + ny], [to.x - nx, to.y - ny], [from.x - nx, from.y - ny]];
+    return svg('polygon', { class: cls, points: pts.map((q) => q.join(',')).join(' ') });
+  }
+  return svg('circle', { class: cls, cx: shape.centre.x, cy: shape.centre.y, r: shape.radius });
 }
 
 const progress = (game, w) => Math.min(1, Math.max(0, (game.time - w.start) / Math.max(0.01, w.end - w.start)));
@@ -150,8 +163,13 @@ function build(root, game) {
     drawHover(arena);
   });
   arena.addEventListener('click', (e) => {
-    if (view.picking == null || !view.onPick) return;
-    view.onPick(A.pointText(toPoint(arena, e)));
+    if (view.picking == null) return;
+    if (view.reach) {
+      const t = snapTarget(toPoint(arena, e));
+      if (t && t.ok && view.onTarget) view.onTarget(view.reach.key, t.id);
+      return;
+    }
+    if (view.onPick) view.onPick(A.pointText(toPoint(arena, e)));
   });
 }
 
@@ -163,7 +181,19 @@ function toPoint(arena, e) {
   return { x: snap(((e.clientX - r.left) / r.width) * W), y: snap(((e.clientY - r.top) / r.height) * H) };
 }
 
+// A targeted attack is open: the target nearest the mouse (the opponent, or one of their constructs).
+function snapTarget(p) {
+  const list = view.reach ? view.reach.targets : [];
+  let best = null;
+  for (const t of list) {
+    const d = Math.hypot(t.at.x - p.x, t.at.y - p.y);
+    if (!best || d < best.d) best = { ...t, d };
+  }
+  return best && best.d < 3 ? best : null;
+}
+
 // While picking a destination: the route to the spot under the mouse, how long it takes, and the range then.
+// While a targeted attack is open: which target the mouse is on, and whether it's in reach.
 function drawHover(arena) {
   const layer = arena.querySelector('.hover');
   const tip = arena.querySelector('.arena-tip');
@@ -176,28 +206,46 @@ function drawHover(arena) {
   place(tip, game, view.hoverAt);
   tip.classList.toggle('flip', view.hoverAt.x > game.arena.width * 0.6);
   tip.hidden = false;
+  if (view.reach) {
+    const t = snapTarget(view.hoverAt);
+    if (!t) { tip.hidden = true; return; }
+    layer.appendChild(svg('circle', { class: `snap${t.ok ? '' : ' bad'}`, cx: t.at.x, cy: t.at.y, r: 1.1 }));
+    tip.classList.toggle('bad', !t.ok);
+    tip.textContent = t.ok ? `${t.label}${t.chance != null ? ` · ${Math.round(t.chance * 100)}% to hit` : ''} · click to target` : `${t.label}: ${t.why}`;
+    return;
+  }
   if (view.aiming) {
-    // Aiming an area: the circle it would make here, and whether the opponent is inside it now.
+    // Aiming an area: the shape it would make here, and whether the opponent is inside it now.
     const prof = game.attackProfile(f, view.aiming.key, view.aiming.amount);
-    const spot = game.planArea(f, prof, view.hoverAt);
     const o = game.opponent(f);
     const g = svg('g', { class: `theme-${f.theme}` });
-    g.appendChild(svg('circle', { class: `area aim${spot.error ? ' bad' : ''}`, cx: view.hoverAt.x, cy: view.hoverAt.y, r: prof.radius }));
     layer.appendChild(g);
+    if (prof.shape === 'line') {
+      const line = game.planLine(f, prof, view.hoverAt);
+      tip.classList.toggle('bad', !!line.error);
+      if (line.error) { tip.textContent = line.error; return; }
+      const shape = { shape: 'line', from: line.origin, to: line.end, width: prof.width };
+      g.appendChild(shapeEl(shape, 'area aim'));
+      const k = game.inArea(shape, game.pos(o));
+      tip.textContent = `${fmt(A.dist(line.origin, line.end))} m beam · ${o.name} ${k.inside ? 'in its path' : 'out of its path'} now`;
+      return;
+    }
+    const spot = game.planArea(f, prof, view.hoverAt);
+    g.appendChild(svg('circle', { class: `area aim${spot.error ? ' bad' : ''}`, cx: view.hoverAt.x, cy: view.hoverAt.y, r: prof.radius }));
     tip.classList.toggle('bad', !!spot.error);
     if (spot.error) { tip.textContent = spot.error; return; }
     const k = game.areaCatch(spot.centre, prof.radius, game.pos(o));
     tip.textContent = `${fmt(spot.dist)} m away · ${fmt(prof.radius)} m radius · ${o.name} ${k.inside ? 'inside' : k.outside ? 'outside' : `behind a ${k.blockedBy.name}`} now`;
     return;
   }
-  const plan = game.planMove(f, view.hoverAt);
+  const plan = view.flight ? game.planMove(f, view.hoverAt, view.flight) : game.planMove(f, view.hoverAt);
   if (plan.error) {
     tip.textContent = plan.error;
     tip.classList.add('bad');
     layer.appendChild(svg('circle', { class: 'spot bad', cx: view.hoverAt.x, cy: view.hoverAt.y, r: 0.35 }));
     return;
   }
-  const w = moveTime(plan.length, game.speed(f));
+  const w = view.flight ? view.flight.travel : moveTime(plan.length, game.speed(f));
   const o = game.opponent(f);
   const gap = A.dist(plan.dest, game.pos(o, game.time + w));
   tip.classList.remove('bad');
@@ -216,8 +264,11 @@ export function renderField(game, opts = {}) {
   if (!root) return;
   view.game = game;
   view.aiming = opts.aiming || null;
+  view.reach = opts.reach || null;
+  view.flight = opts.flight || null;
   view.picking = opts.picking ?? null;
   view.onPick = opts.onPick || null;
+  view.onTarget = opts.onTarget || null;
   if (root.querySelector('.arena')?.dataset.layout !== `${game.arena.name}:areas`) build(root, game);
   const arena = root.querySelector('.arena');
   const pos = game.fighters.map((f) => game.pos(f));
@@ -231,7 +282,17 @@ export function renderField(game, opts = {}) {
   const acting = game.prompt && game.prompt.fighter != null ? game.fighters[game.prompt.fighter] : game.fighters[0];
   const rings = arena.querySelector('.rings');
   rings.setAttribute('class', `rings theme-${acting.theme}`);
-  rings.replaceChildren(...A.BANDS.map((r) => svg('circle', { cx: pos[acting.index].x, cy: pos[acting.index].y, r })));
+  // An open targeted attack shows its own reach instead: best distance dashed, farthest solid,
+  // and marks each target in or out of reach.
+  if (view.reach) {
+    const at = pos[acting.index];
+    const { best, max } = view.reach.spec;
+    const els = [];
+    if (Number.isFinite(max)) els.push(svg('circle', { class: 'reach', cx: at.x, cy: at.y, r: max }));
+    if (best < (Number.isFinite(max) ? max - 0.01 : 60)) els.push(svg('circle', { class: 'reach best', cx: at.x, cy: at.y, r: best }));
+    for (const t of view.reach.targets) els.push(svg('circle', { class: `target${t.ok ? '' : ' out'}${t.chosen ? ' chosen' : ''}`, cx: t.at.x, cy: t.at.y, r: 0.9 }));
+    rings.replaceChildren(...els);
+  } else rings.replaceChildren(...A.BANDS.map((r) => svg('circle', { cx: pos[acting.index].x, cy: pos[acting.index].y, r })));
 
   // The line between the fighters, broken when an obstacle blocks it.
   arena.querySelector('.sight').replaceChildren(svg('line', {
@@ -252,18 +313,26 @@ export function renderField(game, opts = {}) {
     return g;
   }));
 
-  // Area attacks winding up (where they'll be centred when they land), and the hovered card's.
-  const areas = game.events.filter((e) => e.action.kind === 'attack' && e.action.profile && e.action.profile.radius != null).map((e) => {
-    const f = game.fighters[e.actor];
-    const c = game.areaCentre(f, e.action.profile, e.time);
+  // Zones lingering on the field, area attacks winding up (where they'll be when they land),
+  // and the hovered card's.
+  const areas = game.fighters.flatMap((f) => (f.zones || []).map((z) => {
     const g = svg('g', { class: `theme-${f.theme}` });
-    g.appendChild(svg('circle', { class: 'area pending', cx: c.x, cy: c.y, r: e.action.profile.radius }));
-    g.appendChild(svg('title')).textContent = `${f.name}'s ${e.action.profile.name}: ${fmt(e.action.profile.radius)} m radius, lands t=${fmt(e.time)}`;
+    g.appendChild(shapeEl(z.shape, 'area zone'));
+    g.appendChild(svg('title')).textContent = `${f.name}'s ${z.name}: until t=${fmt(z.until)}${z.slow ? `, Speed −${Math.round(z.slow * 100)}% inside` : ''}`;
     return g;
-  });
-  if (opts.area) {
+  }));
+  for (const e of game.events) {
+    const prof = e.action.kind === 'attack' && e.action.profile;
+    if (!prof || !(prof.radius != null || prof.shape)) continue;
+    const f = game.fighters[e.actor];
+    const g = svg('g', { class: `theme-${f.theme}` });
+    g.appendChild(shapeEl(game.areaShape(f, prof, e.time), `area pending${prof.zone ? ' zone' : ''}`));
+    g.appendChild(svg('title')).textContent = `${f.name}'s ${prof.name}: ${prof.zone ? 'forms' : 'lands'} t=${fmt(e.time)}`;
+    areas.push(g);
+  }
+  if (opts.area && opts.area.shape) {
     const g = svg('g', { class: `theme-${game.fighters[opts.area.who].theme}` });
-    g.appendChild(svg('circle', { class: 'area ghost', cx: opts.area.centre.x, cy: opts.area.centre.y, r: opts.area.radius }));
+    g.appendChild(shapeEl(opts.area.shape, `area ghost${opts.area.zone ? ' zone' : ''}`));
     areas.push(g);
   }
   arena.querySelector('.areas').replaceChildren(...areas);

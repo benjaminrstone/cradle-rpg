@@ -42,6 +42,19 @@ export const TEMPLATES = {
     make: (k) => ({ kind: 'attack', divisor: 3, area: true, dtype: k.dtype === 'spiritual' ? 'spiritual' : undefined, effMult: k.effMult, ranges: rangeList(k.minRange, k.maxRange), ...areaFields(k), bladeHits: k.bladeHits }),
     describe: (k) => `Area attack, no roll, ${areaText(k)}; wind-up madra ÷ 3${k.effMult !== 1 ? `, ${k.effMult}× damage` : ''}${k.dtype === 'spiritual' ? ', spiritual damage' : ''}${k.bladeHits ? '; one extra hit per other blade close to the target' : ''}.`,
   },
+  line: {
+    label: 'Line (beam)', type: 'Striker',
+    knobs: [DTYPE, num('effMult', 'Damage ×', 0.6, 1.4, 0.05, 1), num('length', 'Length (m)', 2, 12, 1, 6), num('lengthPerMadra', 'Length per madra (m)', 0, 2, 0.25, 1), num('width', 'Width (m)', 0.5, 4, 0.25, 1.5)],
+    make: (k) => ({ kind: 'attack', divisor: 4, area: true, shape: 'line', dtype: k.dtype === 'spiritual' ? 'spiritual' : undefined, effMult: k.effMult, length: k.length, lengthPerMadra: k.lengthPerMadra, width: k.width, ranges: [0, 1, 2] }),
+    describe: (k) => `A straight beam from you toward a point you pick: ${k.length} m${k.lengthPerMadra ? ` + ${k.lengthPerMadra} m per madra` : ''} long (up to 24 m), ${k.width} m wide, stopping at the first obstacle. No roll: it hits everything in its path${k.effMult !== 1 ? `, ${k.effMult}× damage` : ''}${k.dtype === 'spiritual' ? ', spiritual damage' : ''}; wind-up madra ÷ 4.`,
+  },
+  zone: {
+    label: 'Zone (lingering Ruler field)', type: 'Ruler',
+    knobs: [DTYPE, num('effMult', 'Damage ×', 0, 1.4, 0.05, 1), MIN_R(0), MAX_R(1), ...AREA_KNOBS,
+      num('duration', 'Lasts (ticks)', 2, 16, 1, 8), num('every', 'Pulses every (ticks)', 1, 8, 1, 4), num('slowPerMadra', 'Slow per madra (%)', 0, 5, 0.5, 0)],
+    make: (k) => ({ kind: 'attack', divisor: 2, area: true, ruler: true, dtype: k.dtype === 'spiritual' ? 'spiritual' : undefined, effMult: k.effMult, ranges: rangeList(k.minRange, k.maxRange), ...areaFields(k), zone: { duration: k.duration, every: k.every, slowPerMadra: k.slowPerMadra / 100 } }),
+    describe: (k) => `A field that settles ${areaText(k)} after its wind-up and stays ${k.duration} ticks, pulsing when it forms and every ${k.every} after${k.effMult > 0 ? ` (its pulses together deal 1.5× an area attack${k.effMult !== 1 ? `, × ${k.effMult}` : ''})` : ' (no damage)'}${k.slowPerMadra ? `; −${k.slowPerMadra}% Speed per madra to anyone of the opponent's inside (up to 50%)` : ''}. Ruler: no channel cap, and you act again soon while it builds.`,
+  },
   empowered: {
     label: 'Empowered strike', type: 'Enforcer',
     knobs: [num('effMult', 'Damage ×', 0.6, 1.4, 0.05, 1), num('toHit', 'To hit', -2, 2, 1, 0)],

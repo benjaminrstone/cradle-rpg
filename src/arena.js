@@ -17,8 +17,9 @@ export const ARENA = {
 // Range words for distances: Close up to 2 m, Mid up to 10 m, Far beyond. Attacks reach and
 // lose accuracy by the metre (rules.js); the words are shorthand.
 export const BANDS = [2, 10];
-// The largest an area can grow.
+// The largest an area can grow, and the longest a line (a beam) can reach.
 export const AREA_MAX = 14;
+export const LINE_MAX = 24;
 // A fighter's size, for keeping clear of walls and obstacles.
 export const RADIUS = 0.5;
 // Crown stars hang this high over their owner: out of reach of anything short-ranged, and over every obstacle.
@@ -59,6 +60,39 @@ function crosses(a, b, r, pad = 0) {
     else { if (t < t0) return false; if (t < t1) t1 = t; }
   }
   return t0 < t1 - 1e-9;
+}
+
+// Where the segment a→b first enters an obstacle (as a fraction of the way, 0–1), or 1 if it doesn't.
+function entry(a, b, r) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  let t0 = 0;
+  let t1 = 1;
+  for (const [p, q] of [[-dx, a.x - r.x], [dx, r.x + r.w - a.x], [-dy, a.y - r.y], [dy, r.y + r.h - a.y]]) {
+    if (Math.abs(p) < 1e-12) { if (q < 0) return 1; continue; }
+    const t = q / p;
+    if (p < 0) { if (t > t1) return 1; if (t > t0) t0 = t; } else { if (t < t0) return 1; if (t < t1) t1 = t; }
+  }
+  return t0 < t1 - 1e-9 ? t0 : 1;
+}
+
+// A beam from a toward b stops at the first obstacle or the arena wall: where it ends.
+export function lineStop(arena, a, b) {
+  let k = Math.min(1, ...arena.obstacles.map((r) => entry(a, b, r)));
+  const clampT = (v0, d, lo, hi) => (d > 0 ? (hi - v0) / d : d < 0 ? (lo - v0) / d : Infinity);
+  k = Math.min(k, clampT(a.x, b.x - a.x, 0, arena.width), clampT(a.y, b.y - a.y, 0, arena.height));
+  return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
+}
+
+// The distance from p to the segment a→b, and which side of the line p is on (+1 or -1).
+export function segDist(a, b, p) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  const k = len2 > 0 ? Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+  const q = { x: a.x + dx * k, y: a.y + dy * k };
+  const cross = dx * (p.y - a.y) - dy * (p.x - a.x);
+  return { dist: Math.hypot(p.x - q.x, p.y - q.y), side: cross >= 0 ? 1 : -1, along: k };
 }
 
 // The obstacle in the way of a line from a to b, if any. Anything high overhead sees over them all.

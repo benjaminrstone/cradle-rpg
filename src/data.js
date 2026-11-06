@@ -164,6 +164,49 @@ export const PATHS = {
   },
 };
 
+PATHS.sandviper = {
+  name: 'Path of the Sandviper',
+  signatureStat: 'control',
+  summary: 'Venom madra from the Desolate Wilds: corrosive, so its techniques ignore 2 points of Toughness. Zones opponents with paralytic gas and picks at them with needles.',
+  efficiencyMult: 1,
+  sharpness: 2,
+  selfBurn: false,
+  techniques: [
+    {
+      id: 'venomNeedles', name: 'Venom Needles', kind: 'attack', type: 'Striker',
+      divisor: 4, toHit: 0, ranges: [0, 1, 2], bestRange: 1,
+      desc: 'A spray of finger-length needles of acid-green venom madra. Corrosive: ignores 2 Toughness. Any range; best within 10 m.',
+    },
+    {
+      id: 'paralyticCloud', name: 'Paralytic Cloud', kind: 'attack', type: 'Ruler',
+      divisor: 2, ruler: true, area: true, aim: 'set', ranges: [0, 1], radius: 3, radiusPerMadra: 0.25,
+      zone: { duration: 8, every: 4, slowPerMadra: 0.02 },
+      desc: 'A Ruler technique that fills the air with toxic green gas. Set it at a spot within 10 m that you can see: after its wind-up it settles there (3 m + 0.25 m per madra) and stays 8 ticks. Anyone of your opponent\u2019s inside is slowed by 2% Speed per madra (up to 50%), and it pulses when it forms and every 4 ticks after. Ruler: no channel cap, and your next turn comes 1.5 ticks after you start.',
+    },
+  ],
+};
+
+PATHS.heavensGlory = {
+  name: 'Path of Heaven\u2019s Glory',
+  signatureStat: 'cap',
+  summary: 'Light madra drawn from Samara\u2019s Ring above the peak: burning golden beams, and walls of golden glass.',
+  efficiencyMult: 1,
+  sharpness: 0,
+  selfBurn: false,
+  techniques: [
+    {
+      id: 'heavensLance', name: 'Heaven\u2019s Lance', kind: 'attack', type: 'Striker',
+      divisor: 4, area: true, shape: 'line', length: 6, lengthPerMadra: 1, width: 1.5, ranges: [0, 1, 2],
+      desc: 'A straight beam of burning golden light from where you stand, toward a point you pick: 6 m + 1 m per madra long (up to 24 m), 1.5 m wide, stopping at the first obstacle. A line attack: no roll, it hits everything in its path. Sidestep out of it, or block.',
+    },
+    {
+      id: 'glassWall', name: 'Wall of Golden Glass', kind: 'construct', type: 'Forger', construct: 'barrier', barrierName: 'golden glass wall',
+      divisor: 3,
+      desc: 'Panels of golden glass with HP of 2 × madra, filling in as they build while you keep acting. They soak the physical and technique damage that gets through your reduction; spiritual hits pass through. Casting again adds to it.',
+    },
+  ],
+};
+
 export const TRAITS = {
   swordArms: {
     name: 'Sword arms (Goldsign)',
@@ -178,6 +221,7 @@ export const WEAPONS = [
   { name: 'sword', blade: true, damage: 0 },
   { name: 'scissors', blade: true, damage: 0 },
   { name: 'hammer', blade: false, damage: 4 },
+  { name: 'awl', blade: false, damage: 2 },
 ];
 
 export const FIGHTERS_RAW = [
@@ -204,6 +248,12 @@ export const FIGHTERS_RAW = [
     // Hard to hurt; slow, with a damaged spirit.
     steps: { toughness: 3, health: 3, control: -1, speed: -1, spirit: -1, pool: -1 },
     traits: [], weapon: { name: 'hammer', blade: false, damage: 4 },
+  },
+  {
+    id: 'kral', name: 'Kral', path: 'sandviper', stage: 'Lowgold', theme: 'venom',
+    // Sandviper bandit prince: a Sandviper (Bloodforged) Iron body, good control, not much finesse.
+    steps: { control: 2, toughness: 1, pool: 2, speed: 1, health: 1, precision: 1, perception: -1, spirit: -1 },
+    traits: [], weapon: { name: 'awl', blade: false, damage: 2 },
   },
 ];
 

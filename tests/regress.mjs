@@ -46,7 +46,9 @@ const customPath = compilePath({
   techniques: [
     entry('s', 'striker', 'Test Bolt', { dtype: 'spiritual', toHit: 1 }),
     entry('set', 'area', 'Test Mortar', { aim: 'set', minRange: 0, maxRange: 2, radius: 2, radiusPerMadra: 0.3 }),
-    entry('rel', 'ruler', 'Test Storm', { aim: 'release', minRange: 0, maxRange: 2, radius: 3 }),
+    entry('rul', 'ruler', 'Test Storm', { minRange: 0, maxRange: 2, radius: 3 }),
+    entry('ln', 'line', 'Test Beam', { width: 2 }),
+    entry('zn', 'zone', 'Test Fog', { aim: 'set', minRange: 0, maxRange: 1, slowPerMadra: 2, every: 3, duration: 9 }),
     entry('emp', 'empowered', 'Test Fist', { toHit: 1 }),
     entry('st', 'stance', 'Test Mantle', { redirect: true, dr: 2, buildUp: true, speedMult: 1.1 }),
     entry('bar', 'barrier', 'Test Wall', { sizeMult: 1.25 }),
@@ -60,7 +62,8 @@ const customPure = compilePath({
   id: 'path-pure', name: 'Path of Pure Tests', summary: '', element: '', madraName: 'Pure test', color: '#ffffff',
   signatureStat: 'pool', efficiencyMult: 1, sharpness: 0, pureMadra: true, selfBurn: true,
   techniques: [
-    entry('a', 'area', 'Pure Burst', { aim: 'release', minRange: 0, maxRange: 1, bladeHits: true }),
+    entry('a', 'area', 'Pure Burst', { minRange: 0, maxRange: 1, bladeHits: true }),
+    entry('z', 'zone', 'Pure Haze', { effMult: 0, slowPerMadra: 3 }),
     entry('b', 'striker', 'Pure Lance', {}),
     entry('c', 'stance', 'Pure Guard', { halvesTechniques: true, stanceBreakMult: 1.5 }),
   ],
@@ -78,7 +81,8 @@ const custom = (id, name, pathDef, steps, extra = {}) => ({
 const TESTER = custom('tester', 'Tester', customPath, { control: 2, cap: 2, speed: 1 }, { weapon: { name: 'sword', blade: true, damage: 0 }, traits: ['swordArms'] });
 const PURIST = custom('purist', 'Purist', customPure, { pool: 2, perception: 2 }, { weapon: { name: 'hammer', blade: false, damage: 4 } });
 
-const ROSTER = [...FIGHTERS, TESTER, PURIST, refinedEithan];
+const GLORY = custom('glory', 'Glory Elder', { ...PATHS.heavensGlory, id: 'heavensGlory', theme: 'light' }, { cap: 2, precision: 1 });
+const ROSTER = [...FIGHTERS, TESTER, PURIST, refinedEithan, GLORY];
 
 // ---------- recording ----------
 // Recorded values are canonical, so only differences a caller could notice count: numbers are

@@ -38,6 +38,7 @@ export class Game {
       pos: { ...this.arena.starts[i] }, // where the fighter stands (the start of a move in progress)
       moving: null,       // move in progress: { start, end, from, path: [points after from] }
       constructs: [],     // Forged constructs: { id, kind, name, hp, maxHp, madra? }
+      zones: [],          // areas this fighter has left lingering on the field (see zones)
       seen: [],           // technique ids this fighter has used, so the opponent can look them up
     }));
     this.addLog(`The fight begins in the ${this.arena.name}, ${fmt(this.gap())} m apart (${R.RANGES[this.band()]} range).`, 'system');
@@ -76,6 +77,7 @@ export class Game {
       out.health = Math.min(out.health, out.stats.health);
       out.spirit = Math.min(out.spirit, out.stats.spirit);
       out.madra = Math.min(out.madra, out.stats.pool);
+      out.zones = out.zones || [];
       return out;
     });
     // Drop stances whose technique no longer exists.
@@ -130,6 +132,8 @@ export class Game {
       if (def.speedMult) s *= def.speedMult;
       if (def.buildUp) s *= 1 + def.buildUp.speed * this.buildUp(f, def);
     }
+    // The opponent's zones slow you while you stand in them.
+    for (const z of this.zoneAt(this.opponent(f), this.pos(f))) s *= 1 - (z.slow || 0);
     return s;
   }
 
@@ -250,19 +254,37 @@ export class Game {
   }
 
   // ---------- area attacks ----------
-  // An area attack is a circle, fixed in place before anyone can react to it. Its centre
-  // depends on the technique's aim:
-  //   self: on the attacker, wherever they are when it lands (the default);
-  //   set:  at a spot picked when it starts, within the technique's reach, in sight.
-  // Its radius grows with madra, up to AREA_MAX. It hits everything inside with a clear line
-  // from the centre.
+  // An area attack is a shape fixed in place before anyone can react to it, hitting everything
+  // inside it with no roll:
+  //   circle, aim self: centred on the attacker, wherever they are when it lands (the default);
+  //   circle, aim set:  centred on a spot picked when it starts, within reach, in sight;
+  //   line:             a beam from where the attacker stands when it starts, toward a point
+  //                     picked then; it stops at the first obstacle or wall.
+  // Circles grow with madra up to AREA_MAX and need a clear line from their centre; lines grow in
+  // length up to LINE_MAX and have a fixed width. An area with `zone` stays where it formed for a
+  // while and pulses (see zones below) instead of landing once.
   areaRadius(t, madra) {
     return Math.min(A.AREA_MAX, (t.radius ?? 4) + (t.radiusPerMadra ?? 0.5) * madra);
   }
 
-  // Fill in where an area set at a point is aimed: "x:y", or "them" for the opponent's spot now.
-  // Returns an error message, or null.
+  // The area fields of an attack profile.
+  areaFields(t, madra) {
+    const zone = t.zone ? { zone: { duration: t.zone.duration, every: t.zone.every, slow: Math.min(R.ZONE_SLOW_MAX, (t.zone.slowPerMadra || 0) * madra) } } : {};
+    if (t.shape === 'line') {
+      return { shape: 'line', aim: 'line', length: Math.min(A.LINE_MAX, (t.length ?? 6) + (t.lengthPerMadra ?? 1) * madra), width: t.width ?? 1.5, ...zone };
+    }
+    return { shape: 'circle', aim: t.aim === 'set' ? 'set' : 'self', radius: this.areaRadius(t, madra), ...zone };
+  }
+
+  // Fill in where an area is aimed: the centre of a circle set at a point, or the direction of a
+  // line ("x:y", or "them" for the opponent's spot now). Returns an error message, or null.
   aimArea(f, prof, target) {
+    if (prof.aim === 'line') {
+      const plan = this.planLine(f, prof, target);
+      if (plan.error) return plan.error;
+      Object.assign(prof, { origin: plan.origin, end: plan.end, target: '' });
+      return null;
+    }
     if (prof.aim !== 'set') return null;
     prof.target = '';
     const plan = this.planArea(f, prof, target);
@@ -284,10 +306,31 @@ export class Game {
     return { centre, dist: s.dist };
   }
 
-  // Where an area attack's centre is at time t.
+  // A line from where f stands toward a point: where it starts and where it stops.
+  planLine(f, prof, to) {
+    const o = this.opponent(f);
+    const raw = to === 'them' ? this.pos(o) : typeof to === 'string' ? A.parsePoint(to) : to;
+    if (!raw) return { error: 'Choose a direction: click the field' };
+    const origin = { x: Math.round(this.pos(f).x * 10) / 10, y: Math.round(this.pos(f).y * 10) / 10 };
+    const d = A.dist(origin, raw);
+    if (d < 0.1) return { error: 'Pick a direction away from you' };
+    const far = { x: origin.x + ((raw.x - origin.x) / d) * prof.length, y: origin.y + ((raw.y - origin.y) / d) * prof.length };
+    const end = A.lineStop(this.arena, origin, far);
+    return { origin, end: { x: Math.round(end.x * 100) / 100, y: Math.round(end.y * 100) / 100 } };
+  }
+
+  // Where an area attack's centre is at time t (the start of a line).
   areaCentre(f, prof, t = this.time) {
+    if (prof.aim === 'line' && prof.origin) return prof.origin;
     if (prof.aim === 'set' && prof.centre) return prof.centre;
     return this.pos(f, t);
+  }
+
+  // The shape an area attack makes if it lands at time t: { shape: 'circle', centre, radius } or
+  // { shape: 'line', from, to, width }.
+  areaShape(f, prof, t = this.time) {
+    if (prof.shape === 'line') return { shape: 'line', from: prof.origin, to: prof.end, width: prof.width };
+    return { shape: 'circle', centre: this.areaCentre(f, prof, t), radius: prof.radius };
   }
 
   // Is a point inside the circle, with a clear line from its centre?
@@ -297,38 +340,98 @@ export class Game {
     return { inside: dist <= radius + EPS && !blockedBy, dist, blockedBy, outside: dist > radius + EPS };
   }
 
+  // Is a point inside a shape? For a line, anyone whose body overlaps the beam.
+  inArea(shape, p) {
+    if (shape.shape === 'line') {
+      const s = A.segDist(shape.from, shape.to, p);
+      const reach = shape.width / 2 + A.RADIUS;
+      return { inside: s.dist <= reach + EPS, dist: s.dist, outside: s.dist > reach + EPS, blockedBy: null, side: s.side };
+    }
+    return this.areaCatch(shape.centre, shape.radius, p);
+  }
+
   // Would an area attack landing at time t catch the opponent?
   areaLands(f, prof, t) {
     const o = this.opponent(f);
-    const centre = this.areaCentre(f, prof, t);
-    const k = this.areaCatch(centre, prof.radius, this.pos(o, t));
-    if (k.inside) return { ok: true, centre, dist: k.dist };
-    return { ok: false, centre, dist: k.dist, why: k.outside ? `${o.name} is outside it (${fmt(k.dist)} m from the centre)` : `${o.name} is sheltered by a ${k.blockedBy.name}` };
+    const shape = this.areaShape(f, prof, t);
+    const k = this.inArea(shape, this.pos(o, t));
+    const centre = shape.centre || shape.from;
+    if (k.inside) return { ok: true, centre, shape, dist: k.dist };
+    const why = k.blockedBy ? `${o.name} is sheltered by a ${k.blockedBy.name}`
+      : shape.shape === 'line' ? `${o.name} is out of its path (${fmt(k.dist)} m to the side)` : `${o.name} is outside it (${fmt(k.dist)} m from the centre)`;
+    return { ok: false, centre, shape, dist: k.dist, why };
   }
 
   areaGate(f, prof, landAt) {
     const o = this.opponent(f);
     const l = this.areaLands(f, prof, landAt);
     const later = landAt > this.time + EPS;
-    if (l.ok) return { warning: null, note: later ? `${o.name} will be ${fmt(l.dist)} m from the centre when it lands` : null };
-    return { warning: `${later ? 'When it lands, ' : ''}${l.why}: ${l.out ? 'wasted' : 'it only hits what is inside'}, unless someone moves`, note: null };
+    if (l.ok) return { warning: null, note: later ? (l.shape.shape === 'line' ? `${o.name} will be in its path when it ${prof.zone ? 'forms' : 'lands'}` : `${o.name} will be ${fmt(l.dist)} m from the centre when it ${prof.zone ? 'forms' : 'lands'}`) : null };
+    return { warning: `${later ? `When it ${prof.zone ? 'forms' : 'lands'}, ` : ''}${l.why}: it only hits what is inside, unless someone moves`, note: null };
   }
 
   areaLine(f, prof) {
+    if (prof.shape === 'line') return `A ${fmt(A.dist(prof.origin, prof.end))} m beam, ${fmt(prof.width)} m wide, toward (${fmt(prof.end.x)}, ${fmt(prof.end.y)}): everything in its path`;
     const r = `${fmt(prof.radius)} m`;
-    if (prof.aim === 'set') return `Forms at (${fmt(prof.centre.x)}, ${fmt(prof.centre.y)}): everything within ${r} of it, wherever anyone moves`;
-    return `Hits everything within ${r} of you when it lands, in sight`;
+    if (prof.aim === 'set') return `${prof.zone ? 'Settles' : 'Forms'} at (${fmt(prof.centre.x)}, ${fmt(prof.centre.y)}): everything within ${r} of it, wherever anyone moves`;
+    return `${prof.zone ? 'Settles around you' : 'Hits everything within ' + r + ' of you'} when it ${prof.zone ? `forms: everything within ${r}, staying there` : 'lands, in sight'}`;
   }
 
   // An area attack also hits the defender's constructs inside it (barriers only soak).
-  areaConstructHits(att, def, prof, hits) {
+  areaConstructHits(att, def, prof, hits, shape = prof.landed) {
     const from = prof.centre || this.pos(att);
     for (const c of [...def.constructs]) {
       if (c.kind === 'barrier') continue;
       const p = this.constructPos(def, c);
-      const ok = prof.radius != null ? this.areaCatch(from, prof.radius, p).inside : this.reaches(prof, from, p);
+      const ok = shape ? this.inArea(shape, p).inside && !(shape.shape === 'line' && p.z) : prof.radius != null ? this.areaCatch(from, prof.radius, p).inside : this.reaches(prof, from, p);
       if (ok) this.damageConstruct(def, c, this.constructDamage(prof) * hits, prof.name);
     }
+  }
+
+  // ---------- zones ----------
+  // A zone is an area that stays where it formed for `duration` ticks. It pulses when it forms
+  // and every `every` ticks after: each pulse hits whoever of the opponent's is inside then (no
+  // roll and no reaction; reduction and barriers apply), and its slow cuts the Speed of an
+  // opponent standing in it. Its pulses together deal ZONE_TOTAL times a one-off area attack of
+  // the same madra. Leaving early takes less; Madra Pulse can disperse it.
+  zoneAt(f, p) { return f.zones.filter((z) => this.inArea(z.shape, p).inside); }
+
+  formZone(f, o, prof, shape) {
+    const z = prof.zone;
+    const pulses = Math.floor(z.duration / z.every + EPS) + 1;
+    const fixed = shape.shape === 'circle' ? { ...shape, centre: { ...shape.centre } } : shape;
+    const zone = {
+      id: `z${this.nextId++}`, name: prof.name, shape: fixed, madra: prof.madra, slow: z.slow,
+      until: this.time + z.duration, pulses,
+      pulse: { ...prof, zone: undefined, damage: (prof.damage * R.ZONE_TOTAL) / pulses, landed: fixed },
+    };
+    f.zones.push(zone);
+    this.addLog(`${f.name}'s ${prof.name} settles${fixed.shape === 'circle' ? ` (${fmt(fixed.radius)} m around (${fmt(fixed.centre.x)}, ${fmt(fixed.centre.y)}))` : ''} for ${fmt(z.duration)} ticks${zone.slow ? `: Speed −${pct(zone.slow)} inside` : ''}.`, 'hit', f.index);
+    for (let n = 1; n < pulses; n++) {
+      this.events.push({ id: this.nextId++, time: this.time + n * z.every, type: 'resolve', actor: f.index, action: { kind: 'zonePulse', zone: zone.id, n, last: n === pulses - 1 } });
+    }
+    this.zonePulse(f, zone, pulses === 1);
+  }
+
+  zonePulse(f, zone, last) {
+    const o = this.opponent(f);
+    if (zone.pulse.damage > 0.05) {
+      if (this.inArea(zone.shape, this.pos(o)).inside) {
+        const res = this.hitResult(f, o, zone.pulse);
+        const soak = res.absorbed ? ` (barrier soaks ${fmt(res.absorbed)})` : '';
+        this.addLog(`${f.name}'s ${zone.name} washes over ${o.name} for ${res.dmg}${res.track === 'spirit' ? ' spirit' : ''}${soak}.`, 'hit', f.index);
+        this.applyHit(o, res);
+      }
+      this.areaConstructHits(f, o, zone.pulse, 1, zone.shape);
+    }
+    if (last) this.endZone(f, zone, 'fades');
+    this.checkEnd();
+  }
+
+  endZone(f, zone, how) {
+    f.zones = f.zones.filter((z) => z !== zone);
+    this.events = this.events.filter((e) => !(e.action.kind === 'zonePulse' && e.action.zone === zone.id));
+    this.addLog(`${f.name}'s ${zone.name} ${how}.`, how === 'fades' ? 'dim' : 'warn', f.index);
   }
 
   // ---------- log ----------
@@ -388,9 +491,10 @@ export class Game {
       bestRange: t.bestRange ?? t.ranges[0],
       reachSpec: this.specOf(t),
       area: !!t.area,
-      ...(t.area ? { aim: t.aim === 'set' ? 'set' : 'self', radius: this.areaRadius(t, madra) } : {}),
+      ...(t.area ? this.areaFields(t, madra) : {}),
       hits: 1,
       bladeHits: !!t.bladeHits,
+      ...(t.hits > 1 ? { hits: t.hits, damage: damage / t.hits } : {}),
       madra,
     };
   }
@@ -530,18 +634,31 @@ export class Game {
   // ends outside the circle or behind cover.
   sidestep(def, prof) {
     const from = this.pos(def);
-    const centre = prof.centre || this.pos(this.opponent(def));
-    const d = A.dist(from, centre);
-    const ux = d > EPS ? (from.x - centre.x) / d : 1;
-    const uy = d > EPS ? (from.y - centre.y) / d : 0;
+    const shape = prof.landed || this.areaShape(this.opponent(def), prof);
+    let ux;
+    let uy;
+    let needs;
+    if (shape.shape === 'line') {
+      // Out of a beam: sideways, away from its axis.
+      const L = A.dist(shape.from, shape.to) || 1;
+      const side = A.segDist(shape.from, shape.to, from);
+      ux = (-(shape.to.y - shape.from.y) / L) * side.side;
+      uy = ((shape.to.x - shape.from.x) / L) * side.side;
+      needs = Math.max(0, shape.width / 2 + A.RADIUS - side.dist);
+    } else {
+      const d = A.dist(from, shape.centre);
+      ux = d > EPS ? (from.x - shape.centre.x) / d : 1;
+      uy = d > EPS ? (from.y - shape.centre.y) / d : 0;
+      needs = Math.max(0, shape.radius - d);
+    }
     const reach = R.sidestep(this.speed(def));
     let to = from;
     for (let k = 1; k > 0.04; k -= 0.05) {
       const q = { x: from.x + ux * reach * k, y: from.y + uy * reach * k };
       if (A.standable(this.arena, q) && A.straight(this.arena, from, q)) { to = q; break; }
     }
-    const k = this.areaCatch(centre, prof.radius, to);
-    return { to, metres: A.dist(from, to), reach, escapes: !k.inside, needs: Math.max(0, prof.radius - d) };
+    const k = this.inArea(shape, to);
+    return { to, metres: A.dist(from, to), reach, escapes: !k.inside, needs };
   }
 
   // ---------- turn options ----------
@@ -588,7 +705,8 @@ export class Game {
         opt.slider = { label: 'Madra', min, max, step: 1, initial: Math.max(min, Math.min(10, max)) };
       }
       if (t.kind === 'attack' && !t.area) opt = withTargets(opt, t);
-      if (t.kind === 'attack' && t.area && t.aim === 'set') opt.point = { area: true };
+      if (t.kind === 'attack' && t.area && t.shape === 'line') opt.point = { area: true, line: true };
+      else if (t.kind === 'attack' && t.area && t.aim === 'set') opt.point = { area: true };
       opts.push(opt);
     }
     return opts;
@@ -686,6 +804,8 @@ export class Game {
       const cost = c.kind === 'barrier' ? c.hp / 2 : c.madra;
       if (this.reaches({ ranges }, from, this.constructPos(f, c)) && cost <= limit) out.push({ kind: 'construct', ref: c, name: c.name, cost });
     }
+    // Zones the pulsing fighter stands in.
+    for (const z of this.zoneAt(f, from)) if (z.madra <= limit) out.push({ kind: 'zone', ref: z, name: z.name, cost: z.madra });
     return out;
   }
 
@@ -711,6 +831,7 @@ export class Game {
       def.constructs = def.constructs.filter((c) => c !== x.ref);
       this.addLog(`${def.name}'s ${x.name} is dispersed.`, 'warn', def.index);
     }
+    for (const x of targets.filter((x) => x.kind === 'zone')) this.endZone(def, x.ref, 'is dispersed');
   }
 
   disruptProfile(f, t) {
@@ -898,7 +1019,7 @@ export class Game {
     if (!f || this.prompt.kind !== 'turn') return;
     const o = this.opponent(f);
     const tk = this.tech(f, key) || {};
-    const pointed = key === 'move' || tk.kind === 'launch' || (tk.area && tk.aim === 'set');
+    const pointed = key === 'move' || tk.kind === 'launch' || (tk.area && (tk.aim === 'set' || tk.shape === 'line'));
     if (target && !pointed && !o.constructs.some((c) => c.id === target)) target = '';
     const p = this.plan(f, key, amount, target);
     if (!p.enabled) return;
@@ -1176,9 +1297,15 @@ export class Game {
     if (a.kind === 'ring') { const t = this.tech(f, a.id); return `+${t.speedBonus} Speed and +${t.meleeBonus} melee damage for ${f.name}`; }
     if (a.kind === 'piece') return `Adds ${fmt(a.madra * 2 * ((this.tech(f, a.id) || {}).sizeMult || 1))} HP to ${f.name}'s barrier`;
     if (a.kind === 'move') return '';
+    if (a.kind === 'zonePulse') {
+      const zone = f.zones.find((z) => z.id === a.zone);
+      if (!zone) return '';
+      const inside = this.inArea(zone.shape, this.pos(o)).inside;
+      return inside ? `${this.hitResult(f, o, zone.pulse).dmg} damage to ${o.name} if they're still inside` : `${o.name} is outside it now`;
+    }
     const prof = a.profile;
     if (!prof) return '';
-    const area = prof.radius != null ? this.areaLands(f, prof, e.time) : null;
+    const area = prof.radius != null || prof.shape ? this.areaLands(f, prof, e.time) : null;
     const landsIn = area ? area.ok : prof.target || prof.overhead ? true : this.reaches(prof, this.pos(f, e.time), this.pos(o, e.time));
     const out = landsIn ? '' : area ? ` · when it lands: ${area.why}` : ' · out of range or blocked when it lands';
     if (a.kind === 'pulse' || prof.effect === 'pulse') {
@@ -1299,6 +1426,11 @@ export class Game {
       this.addLog(`${f.name} ${a.via ? 'lands' : 'arrives'}: ${fmt(this.gap())} m apart (${R.RANGES[this.band()]} range).`, '', f.index);
       return;
     }
+    if (a.kind === 'zonePulse') {
+      const zone = f.zones.find((z) => z.id === a.zone);
+      if (zone) this.zonePulse(f, zone, a.last);
+      return;
+    }
     if (a.kind === 'piece') {
       // The wind-up only finishes with its last piece.
       if (a.n === a.of) f.windups = f.windups.filter((w) => !(w.eventIds || []).includes(ev.id));
@@ -1329,7 +1461,7 @@ export class Game {
     }
 
     const profile0 = a.profile;
-    if (profile0.radius != null) {
+    if (profile0.radius != null || profile0.shape) {
       this.landArea(f, o, profile0, boost);
       return;
     }
@@ -1398,11 +1530,11 @@ export class Game {
   // The opponent gets to react if they're inside; constructs inside are hit either way.
   landArea(f, o, profile0, boost) {
     const l = this.areaLands(f, profile0, this.time);
-    if (l.out || !l.centre) {
-      this.addLog(`${f.name}'s ${profile0.name} is wasted: ${l.why}.`, 'miss', f.index);
+    const profile = this.boosted(f, { ...profile0, ...(l.shape.shape === 'circle' ? { centre: l.centre } : {}), landed: l.shape }, boost);
+    if (profile.zone) {
+      this.formZone(f, o, profile, l.shape);
       return;
     }
-    const profile = this.boosted(f, { ...profile0, centre: l.centre }, boost);
     const where = profile.aim === 'self' ? '' : ` at (${fmt(l.centre.x)}, ${fmt(l.centre.y)})`;
     if (!l.ok) {
       this.addLog(`${f.name}'s ${profile.name} lands${where}, but ${l.why}.`, 'miss', f.index);
@@ -1426,12 +1558,12 @@ export class Game {
   formPiece(f, t, madra, n, of) {
     let b = this.barrier(f);
     if (!b) {
-      b = { id: `c${this.nextId++}`, kind: 'barrier', name: 'Oathsign barrier', hp: 0, maxHp: 0 };
+      b = { id: `c${this.nextId++}`, kind: 'barrier', name: (t && t.barrierName) || 'Oathsign barrier', hp: 0, maxHp: 0 };
       f.constructs.push(b);
     }
     b.hp += madra * 2 * (t.sizeMult || 1);
     b.maxHp = Math.max(b.maxHp, b.hp);
-    this.addLog(`${f.name}'s Oathsign barrier builds: ${fmt(b.hp)} HP (piece ${n}/${of}).`, n === of ? '' : 'dim', f.index);
+    this.addLog(`${f.name}'s ${b.name} builds: ${fmt(b.hp)} HP (piece ${n}/${of}).`, n === of ? '' : 'dim', f.index);
   }
 
   // Offer or withdraw a draw. When both fighters are offering at once, the fight ends in a draw.
@@ -1477,7 +1609,8 @@ export class Game {
       : k === 'piece' ? `barrier piece ${e.action.n}/${e.action.of} forms`
       : k === 'forged' ? `Crown star (${e.action.madra}) forms`
       : k === 'ring' ? `${(this.tech(f, e.action.id) || {}).ringName} forms`
-      : `${e.action.profile.name} lands`;
+      : k === 'zonePulse' ? `${(f.zones.find((z) => z.id === e.action.zone) || {}).name || 'zone'} pulses${e.action.last ? ' and fades' : ''}`
+      : `${e.action.profile.name} ${e.action.profile.zone ? 'forms' : 'lands'}`;
     const type = k === 'move' ? 'move' : k === 'stance' ? 'stance' : k === 'piece' || k === 'forged' || k === 'ring' ? 'construct' : 'attack';
     return { key: `ev:${e.id}`, time: e.time, label: `${f.name}: ${label}`, detail: this.describeEvent(e), who: e.actor, kind: 'resolve', type };
   }

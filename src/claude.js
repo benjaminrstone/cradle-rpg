@@ -182,10 +182,14 @@ function snapshot(game) {
     stances: game.activeStances(f).map((d) => ({ name: d.name, buildUp: game.buildUp(f, d), nextBuildUp: d.buildUp ? r1(game.nextBuildUp(f, d)) : null, upkeep: r1(game.upkeepRate(f, d)) })),
     windups: f.windups.map((w) => {
       const prof = game.windupProfile(w);
-      const area = prof && prof.radius != null ? { centre: pt(game.areaCentre(f, prof, w.end)), radius: r1(prof.radius), aim: prof.aim } : null;
+      const sh = prof && (prof.radius != null || prof.shape) ? game.areaShape(f, prof, w.end) : null;
+      const area = sh && (sh.shape === 'line'
+        ? { shape: 'line', from: pt(sh.from), to: pt(sh.to), width: sh.width, zone: !!prof.zone }
+        : { shape: 'circle', centre: pt(sh.centre), radius: r1(sh.radius), aim: prof.aim, zone: !!prof.zone });
       return { label: w.label, madra: w.madra, lands: r1(w.end), boost: r1(w.boost || 0), area };
     }),
     at: pt(game.pos(f)),
+    zones: (f.zones || []).map((z) => ({ name: z.name, until: r1(z.until), slow: r1(z.slow || 0), shape: z.shape.shape === 'line' ? { from: pt(z.shape.from), to: pt(z.shape.to), width: z.shape.width } : { centre: pt(z.shape.centre), radius: r1(z.shape.radius) } })),
     moving: f.moving && { to: pt(f.moving.path[f.moving.path.length - 1]), arrives: r1(f.moving.end) },
   }));
 

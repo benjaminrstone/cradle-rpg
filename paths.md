@@ -79,3 +79,35 @@ Force madra and Oathsign script circles. It holds ground behind barriers and an 
 **How you win:** be hard to hurt and hard to break. Stone Anchor and a barrier soak what gets through, Accelerate rings make each hammer strike faster and heavier, Seal strips the opponent's stances and wind-ups from any range, and Launch puts you in hammer range before they can step away.
 
 **How you lose:** no damage beyond Close range. Spiritual attacks pass through the barrier and ignore Stone Anchor, and Madra Pulse disperses everything at once.
+
+## Path of the Sandviper
+
+Venom madra from the Desolate Wilds: acid-green and corrosive. A bandit sect's Path that favors Strikers and Rulers over Enforcers, since the madra harms the body. It stays on the offensive, zoning opponents with toxic gas and picking at them from range. (Kral, Lowgold, with an awl.)
+
+**Element property:** corrosive venom. Its techniques ignore 2 points of Toughness.
+
+| Technique | Type | Madra | Wind-up | Effect |
+| --- | --- | --- | --- | --- |
+| Venom Needles | Striker | Any, up to channel cap | Madra ÷ 4 | A spray of finger-length needles of venom madra. Any range; best within 10 m |
+| Paralytic Cloud | Ruler (zone) | Any amount: no channel cap | Madra ÷ 2 | Toxic gas set at a spot within 10 m that you can see. It settles there (3 m + 0.25 m per madra) and stays 8 ticks, pulsing when it forms and every 4 ticks: an opponent inside is slowed by 2% Speed per madra (up to 50%) and takes a little damage each pulse. As a Ruler technique, you keep acting while it builds |
+
+**Learning the Path:** both techniques are core (free).
+
+**How you win:** put the cloud where the opponent needs to be, so they either stand in it slowed or spend time walking around it, and pick at them with needles that slip past Toughness while they do.
+
+**How you lose:** an opponent who closes fast or stays mobile never stands in the gas long, and the Path has no defenses of its own. Madra Pulse disperses a cheap cloud.
+
+## Path of Heaven's Glory
+
+Light madra drawn from Samara's Ring above the peak of Mount Samara: burning golden beams and walls of golden glass. The signature technique of the Heaven's Glory School in Sacred Valley. (No named fighter yet: build one in the Builder.)
+
+| Technique | Type | Madra | Wind-up | Effect |
+| --- | --- | --- | --- | --- |
+| Heaven's Lance | Striker (line) | Any, up to channel cap | Madra ÷ 4 | A straight beam of burning golden light from where you stand toward a point you pick: 6 m + 1 m per madra long (up to 24 m), 1.5 m wide, stopping at the first obstacle. No roll: it hits everything in its path. Sidestep out of it, or block |
+| Wall of Golden Glass | Forger | Any, up to channel cap | Madra ÷ 3 | Panels of golden glass with HP of 2 × madra, filling in as they build while you keep acting. They soak the physical and technique damage that gets through your reduction; spiritual hits pass through |
+
+**Learning the Path:** both techniques are core (free).
+
+**How you win:** a beam that can't miss, from behind a glass wall. Line it up so the opponent has nowhere to sidestep, or catch their constructs along the way.
+
+**How you lose:** a beam is easy to step out of for a fast fighter who sees it coming, and spiritual attacks go straight through the glass.
