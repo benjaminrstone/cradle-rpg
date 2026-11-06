@@ -2,7 +2,7 @@ import { Game, fmt, pct } from './engine.js';
 import { STAT_GROUPS, TRAITS } from './data.js';
 import { allFighters } from './builds.js';
 import { openBuilder } from './builder.js';
-import { RANGES } from './rules.js';
+import { RANGES, blockReduction } from './rules.js';
 import { parsePoint } from './arena.js';
 import { renderField } from './field.js';
 import { initClaude, claudeToAct, waitingPanel, syncClaude, claudeSide, syncFetch } from './claude.js';
@@ -355,7 +355,7 @@ function renderPrompt() {
         <b>${att.name}'s ${a.profile.name}</b> is landing: ${what}${a.profile.toHit ? ` · +${a.profile.toHit} to hit` : ''}${a.profile.area ? ' · area attack, no roll' : ''}
         · your threshold is ${fmt(game.threshold(f))} (stances ${fmt(game.stanceThreshold(f))})
       </div>
-      ${canBlock && !disrupt ? `<label class="slider block-amount">Block per hit <input type="range" min="0" max="${ro.block.maxBase}" value="${ui.block}" data-block><b data-block-val>${ui.block}</b><span class="muted" data-block-dr>−${fmt(1.5 * ui.block)} damage each</span></label>` : ''}
+      ${canBlock && !disrupt ? `<label class="slider block-amount">Block per hit <input type="range" min="0" max="${ro.block.maxBase}" value="${ui.block}" data-block><b data-block-val>${ui.block}</b><span class="muted" data-block-dr>−${fmt(blockReduction(ui.block))} damage each</span></label>` : ''}
       <div class="cards">
         ${reactCard('take', 'Take it')}
         ${ro.construct || pulse ? '' : reactCard('dodge', 'Dodge')}
@@ -691,7 +691,7 @@ document.addEventListener('input', (e) => {
   if (e.target.hasAttribute('data-block')) {
     ui.block = Number(e.target.value);
     document.querySelector('[data-block-val]').textContent = e.target.value;
-    document.querySelector('[data-block-dr]').textContent = `−${fmt(1.5 * ui.block)} damage each`;
+    document.querySelector('[data-block-dr]').textContent = `−${fmt(blockReduction(ui.block))} damage each`;
     for (const c of REACTIONS) {
       const el = document.querySelector(`[data-react-preview="${c}"]`);
       if (el) el.innerHTML = reactPreview(c);

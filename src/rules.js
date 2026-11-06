@@ -84,6 +84,16 @@ export function areaDodgeReduction(bonus) {
   return Math.min(0.9, 0.15 * bonus);
 }
 
+// A block takes this much off every hit it covers, per point of base madra.
+export function blockReduction(madra) {
+  return 1.5 * madra;
+}
+
+// Black Flame burns its user for the madra they spend: 1 health per 5, 1 spirit per 10.
+export function burn(madra) {
+  return { health: madra / 5, spirit: madra / 10 };
+}
+
 // Blocking several hits: each extra hit covered costs 1.5x the base.
 // 1 hit = 1x, 2 hits = 2.5x, 3 hits = 4x, 4 hits = 5.5x.
 export function blockCostFactor(hits) {

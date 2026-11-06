@@ -58,31 +58,21 @@ export class Game {
   // Rebuild a saved fight with the current code. Each fighter's fixed details (stats, Path,
   // traits, weapon) come from the current data, so rule and number changes apply from here on;
   // health, madra, stances, wind-ups and the queue carry over.
+  // A save too old to restore (from before the arena, the fight history or technique tracking)
+  // throws, and the app starts a new fight instead.
   static restore(state, defs, rng = Math.random) {
+    if (!state.arena || !state.history || state.fighters.some((f) => !f.seen)) throw new Error('This fight was saved by an older version of the game.');
     const g = Object.create(Game.prototype);
-    const { distance, ...rest } = state;
-    Object.assign(g, rest, { rng });
-    // Fights saved on the old range strip, or on an older arena layout: stand the fighters on
-    // the current arena's start line (as far apart as the band they were at, or as they were),
-    // and drop any move in progress.
-    if (!g.arena || JSON.stringify(g.arena) !== JSON.stringify(A.ARENA)) {
-      const at = (f) => (f.moving ? A.along(f.moving.from, f.moving.path, A.pathLength(f.moving.from, f.moving.path)
-        * Math.min(1, Math.max(0, (g.time - f.moving.start) / Math.max(EPS, f.moving.end - f.moving.start)))) : f.pos);
-      const gap = g.arena ? Math.min(30, A.dist(at(state.fighters[0]), at(state.fighters[1]))) : [1.5, 8, 16][distance ?? 1];
+    Object.assign(g, state, { rng });
+    // Fights saved on an older arena layout: stand the fighters on the current arena's start
+    // line, as far apart as they were, and drop any move in progress.
+    if (JSON.stringify(g.arena) !== JSON.stringify(A.ARENA)) {
+      const gap = Math.min(30, A.dist(g.pos(state.fighters[0]), g.pos(state.fighters[1])));
       g.arena = A.ARENA;
       const [a, b] = g.arena.starts;
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       state.fighters.forEach((f, i) => { f.pos = { x: mid.x + (i ? 1 : -1) * gap / 2, y: mid.y }; f.moving = null; });
       g.events = g.events.filter((e) => e.action.kind !== 'move');
-    }
-    // Fights saved before history was kept: rebuild an approximate one from the log.
-    if (!g.history) {
-      const typeOf = (t) => (/winds up|begins|starts moving|to move|waits|drops /.test(t) ? 'turn'
-        : / arrives/.test(t) ? 'move' : / is up\./.test(t) ? 'stance'
-          : /gains a .*star|barrier builds/.test(t) ? 'construct' : /hits |misses|washes over|lands/.test(t) ? 'attack' : null);
-      g.history = g.log.map((l, i) => ({ l, i, type: l.who != null ? typeOf(l.text) : null }))
-        .filter((x) => x.type)
-        .map(({ l, i, type }) => ({ key: `log:${i}`, time: l.time, label: l.text, who: l.who, kind: type === 'turn' ? 'turn' : 'resolve', type }));
     }
     g.fighters = state.fighters.map((f) => {
       const def = defs.find((d) => d.id === f.id);
@@ -92,13 +82,6 @@ export class Game {
       out.madra = Math.min(out.madra, out.stats.pool);
       return out;
     });
-    // Fights saved before techniques were tracked: rebuild the list from the fighter's log lines.
-    for (const f of g.fighters) {
-      if (f.seen) continue;
-      const lines = g.log.filter((l) => l.who === f.index).map((l) => l.text);
-      f.seen = g.techList(f).filter((t) => lines.some((x) => x.includes(t.name)
-        || (t.kind === 'forge' && x.includes('Forging')) || (t.kind === 'command' && x.includes('from the Crown')))).map((t) => t.id);
-    }
     // Drop stances whose technique no longer exists.
     for (const f of g.fighters) {
       for (const id of Object.keys(f.stances)) if (!g.tech(f, id)) delete f.stances[id];
@@ -375,8 +358,9 @@ export class Game {
   spend(f, amount, burn) {
     f.madra = Math.max(0, f.madra - amount);
     if (burn) {
-      f.health -= amount / 5;
-      f.spirit -= amount / 10;
+      const b = R.burn(amount);
+      f.health -= b.health;
+      f.spirit -= b.spirit;
       // Fire and destruction in the area feed a boostable wind-up (Void Dragon's Dance).
       for (const w of f.windups) if (w.boostPerMadra) w.boost += amount * w.boostPerMadra;
     }
@@ -656,7 +640,7 @@ export class Game {
     const lines = [];
     if (prof.sharpness) lines.push(`Sharpness ${prof.sharpness}`);
     if (t.boostPerMadra) lines.push(`+${t.boostPerMadra} damage per Black Flame madra you spend while it winds up`);
-    if (this.path(f).selfBurn) lines.push(`Burns you for ${fmt(madra / 5)} health and ${fmt(madra / 10)} spirit`);
+    if (this.path(f).selfBurn) { const b = R.burn(madra); lines.push(`Burns you for ${fmt(b.health)} health and ${fmt(b.spirit)} spirit`); }
     return lines;
   }
 
@@ -741,7 +725,7 @@ export class Game {
     const add = (who, k, v) => { out.deltas[who][k] = (out.deltas[who][k] || 0) + v; };
     if (p.cost != null) {
       add(f.index, 'madra', -p.cost);
-      if (this.path(f).selfBurn) { add(f.index, 'health', -p.cost / 5); add(f.index, 'spirit', -p.cost / 10); }
+      if (this.path(f).selfBurn) { const b = R.burn(p.cost); add(f.index, 'health', -b.health); add(f.index, 'spirit', -b.spirit); }
     }
     // Queue item types: turn, attack, move, stance, construct, buildup (each gets its own marker shape).
     for (const q of p.queue) {
@@ -830,7 +814,7 @@ export class Game {
     const madraCost = m * ro.block.factor;
     const blockDelay = m > 0 ? R.TIMING.blockDelay : 0;
     if (pulse) {
-      const strength = Math.max(0, a.profile.madra - 1.5 * m);
+      const strength = Math.max(0, a.profile.madra - R.blockReduction(m));
       return {
         perHit: 0, total: 0, perHitText: null, track: 'health', absorbed: 0, hits: 1, chance: 1,
         madraCost, delay: blockDelay, interrupts: false, breaksStances: false,
@@ -838,14 +822,14 @@ export class Game {
       };
     }
     if (ro.construct) {
-      const per = Math.max(0, Math.round(ro.take.damage - 1.5 * m));
+      const per = Math.max(0, Math.round(ro.take.damage - R.blockReduction(m)));
       return {
         perHit: per, total: per * a.hits, perHitText: null, track: 'construct', absorbed: 0, hits: a.hits,
         chance: ro.take.chance, madraCost, delay: blockDelay,
         interrupts: false, breaksStances: false, construct: ro.construct,
       };
     }
-    const each = this.hitProfiles(a.profile, a.hits).map((hp, i) => this.hitResult(att, def, hp, { dodging, blockDR: 1.5 * m, hitIndex: i }));
+    const each = this.hitProfiles(a.profile, a.hits).map((hp, i) => this.hitResult(att, def, hp, { dodging, blockDR: R.blockReduction(m), hitIndex: i }));
     const res = each[0];
     return {
       perHit: res.dmg,
@@ -962,6 +946,7 @@ export class Game {
     const blocking = choice === 'block' || choice === 'dodgeBlock';
     const m = blocking ? this.blockAmount(ro, blockBase) : 0;
     const cost = m * ro.block.factor;
+    const dr = R.blockReduction(m);
     const payBlock = () => { this.spend(def, cost, false); def.nextTurn += R.TIMING.blockDelay; };
 
     if (choice === 'redirect') {
@@ -972,12 +957,12 @@ export class Game {
     } else if (pulse) {
       if (m > 0) {
         payBlock();
-        this.addLog(`${def.name} braces against the pulse with ${fmt(cost)} madra (−${fmt(1.5 * m)} strength).`, '', def.index);
+        this.addLog(`${def.name} braces against the pulse with ${fmt(cost)} madra (−${fmt(dr)} strength).`, '', def.index);
       } else this.addLog(`${def.name} lets the pulse come.`, 'dim', def.index);
     } else if (c) {
       if (m > 0) {
         payBlock();
-        this.addLog(`${def.name} reinforces ${c.name} with ${fmt(cost)} madra (−${fmt(1.5 * m)} damage${a.hits > 1 ? ' on each hit' : ''}).`, '', def.index);
+        this.addLog(`${def.name} reinforces ${c.name} with ${fmt(cost)} madra (−${fmt(dr)} damage${a.hits > 1 ? ' on each hit' : ''}).`, '', def.index);
       } else this.addLog(`${def.name} leaves ${c.name} to take it.`, 'dim', def.index);
     } else {
       if (dodging) {
@@ -988,14 +973,14 @@ export class Game {
       }
       if (m > 0) {
         payBlock();
-        this.addLog(`${def.name} blocks with ${fmt(cost)} madra (−${fmt(1.5 * m)} damage on ${a.hits > 1 ? `each of ${a.hits} hits` : 'the hit'}).`, '', def.index);
+        this.addLog(`${def.name} blocks with ${fmt(cost)} madra (−${fmt(dr)} damage on ${a.hits > 1 ? `each of ${a.hits} hits` : 'the hit'}).`, '', def.index);
       }
       if (!dodging && !blocking) this.addLog(`${def.name} lets it come.`, 'dim', def.index);
     }
     this.prompt = null;
-    if (pulse) this.applyPulse(att, def, a.profile, 1.5 * m);
-    else if (c) this.resolveConstructAttack(att, def, a.profile, c, 1.5 * m);
-    else if (choice !== 'redirect') this.resolveAttack(att, def, a.profile, a.hits, dodging, 1.5 * m);
+    if (pulse) this.applyPulse(att, def, a.profile, dr);
+    else if (c) this.resolveConstructAttack(att, def, a.profile, c, dr);
+    else if (choice !== 'redirect') this.resolveAttack(att, def, a.profile, a.hits, dodging, dr);
     this.advance();
   }
 
