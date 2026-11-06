@@ -150,6 +150,7 @@ async function pollMove() {
     }
     onlyDraw = false;
     if (game.prompt.kind === 'reaction') game.react(a.key, a.amount || 0);
+    else if (game.prompt.kind === 'opportunity') game.opportunity(a.key);
     else if (game.prompt.kind === 'turn') game.act(a.key, a.amount || 0, a.target || '');
   }
   const stuck = !onlyDraw && !game.result && decisionKey(game) === before;
@@ -218,10 +219,13 @@ function snapshot(game) {
     const ro = game.reactionOptions();
     reaction = {
       attacker: game.fighters[a.attacker].name,
-      attack: { name: a.profile.name, damage: a.profile.hitDamages ? a.profile.hitDamages.map(r1).join(' + ') : r1(a.profile.damage), dtype: a.profile.dtype, pure: !!a.profile.pure, hits: a.hits, area: a.profile.area, sharpness: a.profile.sharpness, toHit: a.profile.toHit },
+      attack: { name: a.profile.name, damage: a.profile.hitDamages ? a.profile.hitDamages.map(r1).join(' + ') : r1(a.profile.damage), dtype: a.profile.dtype, hits: a.hits, area: a.profile.area, sharpness: a.profile.sharpness, toHit: a.profile.toHit },
       take: { chance: r1(ro.take.chance), damageEach: ro.take.damageText },
-      dodge: { ...ro.dodge, chance: r1(ro.dodge.chance), chances: ro.dodge.chances.map(r1), delay: r1(ro.dodge.delay) },
-      block: { ...ro.block, chance: r1(ro.block.chance) },
+      dodge: {
+        available: ro.dodge.available, chance: r1(ro.dodge.chance), bonus: ro.dodge.bonus, delay: r1(ro.dodge.delay),
+        sidestep: ro.dodge.sidestep && { metres: r1(ro.dodge.sidestep.metres), escapes: ro.dodge.sidestep.escapes },
+      },
+      block: { maxMadra: ro.block.maxBase, soakPerMadra: ro.block.soakPerMadra, zeroAt: ro.block.zeroAt, delay: ro.block.delay },
       redirect: ro.redirect,
       effect: a.profile.effect || null,
       construct: ro.construct ? { id: ro.construct.id, name: ro.construct.name, hp: r1(ro.construct.hp) } : null,
@@ -229,6 +233,12 @@ function snapshot(game) {
         ? { madra: a.profile.madra, breaks: game.reactionOutcome('take').pulse.targets.map((x) => ({ name: x.name, cost: r1(x.cost) })) }
         : null,
     };
+  }
+
+  let opportunity = null;
+  if (p && p.kind === 'opportunity') {
+    const op = game.opportunityOptions();
+    opportunity = { mover: op.mover, strike: { chance: r1(op.strike.chance), damage: op.strike.damageText, delay: r1(op.strike.delay), interrupts: op.strike.interrupts } };
   }
 
   return {
@@ -249,6 +259,7 @@ function snapshot(game) {
     fighters,
     options,
     reaction,
+    opportunity,
     queue: game.upcoming().slice(0, 8).map((i) => ({ time: r1(i.time), label: i.label })),
     log: game.log.slice(-14).map((l) => `t=${fmt(l.time)} ${l.text}`),
   };

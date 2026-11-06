@@ -16,7 +16,7 @@ export const PLANS = {
   strike(g, f, { target, spd, tc }) {
     const prof = { ...g.attackProfile(f, 'strike'), target };
     const w = R.physTime(R.TIMING.strikeWindup, spd);
-    const gate = tc ? g.constructGate(f, [0], tc, 'Close range only') : g.rangeGate(f, [0], g.time + w, 'Close range only');
+    const gate = tc ? g.constructGate(f, prof, tc) : g.rangeGate(f, prof, g.time + w);
     const lines = [`Wind-up ${fmt(w)} · next turn in ${fmt(w)}`, g.attackLines(f, prof, prof.hits, tc)];
     if (gate.note) lines.push(gate.note);
     return {
@@ -40,6 +40,7 @@ export const PLANS = {
       nextTurn: g.time + w,
       queue: [{ time: g.time + w, label: `arrives (${fmt(plan.length)} m)`, type: 'move' }, TURN],
       path: { who: f.index, from: plan.from, path: plan.path },
+      move: plan,
       apply: () => g.startMove(f, plan, w),
     };
   },
@@ -137,13 +138,13 @@ export const PLANS = {
     if (g.maxMadra(f, t) < t.minMadra) return notEnough;
     const madra = g.madraFor(f, t, amount);
     const w = g.twind(t, R.nominalWindup(madra, t.divisor), f.stats.control);
-    const gate = g.rangeGate(f, t.ranges, g.time + w, 'Out of range (Close)');
+    const gate = g.rangeGate(f, t, g.time + w);
     const targets = g.pulseTargets(o, madra, t.ranges);
     const lines = [
       `Wind-up ${fmt(w)} (lands t=${fmt(g.time + w)}) · next turn in ${fmt(w)}`,
       `Cancels ${o.name}'s wind-ups, stances and constructs costing up to ${fmt(madra / 2)} · no roll`,
       targets.length ? `Right now: ${targets.map((x) => `${x.name} (${fmt(x.cost)})`).join(', ')}` : `Nothing of ${o.name}'s is that cheap right now`,
-      `${o.name} can block it at double cost: each point takes 1.5 off its strength`,
+      `${o.name} can block it: each madra takes 1.5 off its strength`,
     ];
     if (gate.note) lines.push(gate.note);
     return {
@@ -164,12 +165,12 @@ export const PLANS = {
   disrupt(g, f, { t, o }) {
     const enough = f.madra >= t.fixedCost;
     const w = g.twind(t, t.windup, f.stats.control);
-    const bands = t.ranges.map((r) => R.RANGES[r]).join('/');
-    const gate = g.rangeGate(f, t.ranges, g.time + w, `Out of range (${bands})`);
+    const bands = R.reachText(g.specOf(t));
+    const gate = g.rangeGate(f, t, g.time + w);
     const prof = g.disruptProfile(f, t);
     const lines = [`Costs ${t.fixedCost} madra · wind-up ${fmt(w)} (lands t=${fmt(g.time + w)}) · next turn in ${fmt(w)}`];
     lines.push(t.area
-      ? `Breaks ${o.name}'s wind-ups, stances${t.destroysConstructs ? ' and constructs' : ''} at ${bands} range · no roll`
+      ? `Breaks ${o.name}'s wind-ups, stances${t.destroysConstructs ? ' and constructs' : ''} within ${bands} · no roll`
       : `If it hits, breaks ${o.name}'s wind-ups and stances · ${g.hitText(f, o, prof)}`);
     if (gate.note) lines.push(gate.note);
     return {
@@ -219,11 +220,11 @@ export const PLANS = {
     return {
       enabled: true, reason: '',
       lines: [
-        `Star forms at t=${fmt(g.time + w)} (${fmt(w)} ticks) · next turn in ${fmt(STAR.forgeRecovery)} (keep acting while it forms)`,
-        `When dropped: ${fmt(sp.damage)} spiritual (${g.hitResult(f, o, sp).dmg} after ${o.name}'s reduction) · star HP ${fmt(madra * (t.sizeMult || 1))}, high overhead (Far)`,
+        `Star forms at t=${fmt(g.time + w)} (${fmt(w)} ticks) · next turn in ${fmt(R.TIMING.actWhileBuilding)} (keep acting while it forms)`,
+        `When dropped: ${fmt(sp.damage)} spiritual (${g.hitResult(f, o, sp).dmg} after ${o.name}'s reduction) · star HP ${fmt(madra * (t.sizeMult || 1))}, high overhead`,
       ],
       cost: s.cost,
-      nextTurn: g.time + STAR.forgeRecovery,
+      nextTurn: g.time + R.TIMING.actWhileBuilding,
       queue: [TURN, { time: g.time + w, label: `star (${madra}) forms`, type: 'construct' }],
       apply: () => {
         g.startWindup(f, w, { kind: 'forged', id: t.id, madra }, madra, { label: `Crown star (${madra})` });
@@ -274,8 +275,7 @@ export const PLANS = {
       const err = g.aimArea(f, prof, target);
       if (err) return { enabled: false, reason: err, lines: [timing, `Radius ${fmt(prof.radius)} m; pick its centre on the field`] };
       const gate = g.areaGate(f, prof, g.time + w);
-      const ac = prof.aimAt ? tc : null;
-      const lines = [timing, g.areaLine(f, prof), ac ? `${g.constructDamage(prof)} damage to ${ac.name}` : g.attackLines(f, prof, g.hitsAgainst(f, o, prof), tc)];
+      const lines = [timing, g.areaLine(f, prof), g.attackLines(f, prof, g.hitsAgainst(f, o, prof))];
       if (gate.note) lines.push(gate.note);
       return {
         enabled: true, reason: '', warning: gate.warning, lines: [...lines, ...notes],
@@ -283,8 +283,7 @@ export const PLANS = {
         project: (p) => {
           const l = g.areaLands(f, prof, g.time + w);
           if (l.centre) p.out.area = { who: f.index, centre: l.centre, radius: prof.radius };
-          if (prof.aimAt) p.out.notes[o.index] = 'aimed at a construct';
-          else if (l.ok) {
+          if (l.ok) {
             const hits = g.hitsAgainst(f, o, prof);
             const res = g.hitResult(f, o, prof);
             p.add(o.index, res.track, -res.dmg * hits);
@@ -293,14 +292,11 @@ export const PLANS = {
         },
         apply: () => {
           const r = `radius ${fmt(prof.radius)} m`;
-          start(prof.aim === 'set' ? ` at (${fmt(prof.centre.x)}, ${fmt(prof.centre.y)}), ${r}`
-            : prof.aim === 'release' ? `${g.aimedAt(f, target) || ` at ${o.name}`}, ${r}`
-              : `, reaching ${fmt(prof.radius)} m around them`);
+          start(prof.aim === 'set' ? ` at (${fmt(prof.centre.x)}, ${fmt(prof.centre.y)}), ${r}` : `, reaching ${fmt(prof.radius)} m around them`);
         },
       };
     }
-    const rangeText = `Out of range (${prof.ranges.map((r) => R.RANGES[r]).join('/')})`;
-    const gate = tc ? g.constructGate(f, prof.ranges, tc, rangeText) : g.rangeGate(f, prof.ranges, g.time + w, rangeText);
+    const gate = tc ? g.constructGate(f, prof, tc) : g.rangeGate(f, prof, g.time + w);
     const lines = [timing, g.attackLines(f, prof, tc ? 1 : g.hitsAgainst(f, o, prof), tc)];
     if (gate.note) lines.push(gate.note);
     return {

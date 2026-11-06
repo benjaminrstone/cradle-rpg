@@ -1,5 +1,6 @@
 // Fight engine: one shared initiative queue, wind-ups, reactions, upkeep, interrupts,
 // Forged constructs, and three damage types (physical, technique, spiritual).
+// Defense comes in three kinds: take it (reduction, stances, barriers), dodge (time), block (madra).
 // Turn choices are worked out in plans.js.
 import * as R from './rules.js';
 import * as A from './arena.js';
@@ -188,35 +189,48 @@ export class Game {
     return { dist, band: A.bandOf(dist), blockedBy: A.blocker(this.arena, from, to) };
   }
 
-  // Can something with these ranges get from `from` to `to`? Overhead attacks (Crown stars) always can.
-  reaches(prof, from, to) {
-    if (prof.overhead) return true;
+  // What something reaches, in metres ({ min, max, best }): a technique, an attack profile, or a
+  // list of range bands.
+  specOf(x) { return R.rangeSpec(Array.isArray(x) ? { ranges: x } : x); }
+
+  // Can something with this reach get from `from` to `to`? Overhead attacks (Crown stars) always can.
+  reaches(x, from, to) {
+    if (x.overhead) return true;
     const s = this.sight(from, to);
-    return prof.ranges.includes(s.band) && !s.blockedBy;
+    return R.inReach(this.specOf(x), s.dist) && !s.blockedBy;
   }
 
   // Range check for an attack: what counts is where both fighters are when it lands. An attack
   // that won't reach can still be chosen; it just gets a warning.
-  rangeGate(f, ranges, landAt, shortReason) {
+  rangeGate(f, x, landAt) {
     const o = this.opponent(f);
+    const spec = this.specOf(x);
     const now = this.sight(this.pos(f), this.pos(o));
     const later = this.sight(this.pos(f, landAt), this.pos(o, landAt));
-    const ok = ranges.includes(later.band);
-    const changes = later.band !== now.band;
+    const ok = R.inReach(spec, later.dist);
+    const moved = Math.abs(later.dist - now.dist) > 0.05;
     let warning = null;
-    if (!ok) warning = `${changes ? `Out of range when it lands (${R.RANGES[later.band]} by then)` : shortReason}: wasted unless the range changes`;
+    if (!ok) warning = `Out of reach${moved ? ' when it lands' : ''} (${fmt(later.dist)} m; it reaches ${R.reachText(spec)}): wasted unless the range changes`;
     else if (later.blockedBy) warning = `A ${later.blockedBy.name} is in the way${landAt > this.time + EPS && now.blockedBy !== later.blockedBy ? ' when it lands' : ''}: wasted unless someone moves`;
     return {
       warning,
-      note: changes && ok ? `Range will be ${R.RANGES[later.band]} when it lands (t=${fmt(landAt)})` : null,
+      note: moved && ok ? `${o.name} will be ${fmt(later.dist)} m away when it lands` : null,
     };
   }
 
-  constructGate(f, ranges, c, shortReason) {
+  constructGate(f, x, c) {
+    const spec = this.specOf(x);
     const s = this.sight(this.pos(f), this.constructPos(this.ownerOf(c), c));
-    const warning = !ranges.includes(s.band) ? `${shortReason}: can't reach ${c.name}`
+    const warning = !R.inReach(spec, s.dist) ? `Out of reach of ${c.name} (${fmt(s.dist)} m; it reaches ${R.reachText(spec)})`
       : s.blockedBy ? `A ${s.blockedBy.name} is in the way of ${c.name}` : null;
     return { warning, note: null };
+  }
+
+  // Walking out of Close range of the opponent lets them strike you as you go.
+  leavesClose(f, plan) {
+    const there = this.pos(this.opponent(f));
+    const close = R.RANGE_METRES[0] + EPS;
+    return A.dist(plan.from, there) <= close && A.dist(plan.dest, there) > close;
   }
 
   // The route a move would take: walking (around obstacles) or a straight flight up to `reach`.
@@ -232,30 +246,23 @@ export class Game {
     if (!path) return { error: flight ? 'An obstacle is in the way of a straight flight' : 'No way through', dest };
     const length = A.pathLength(from, path);
     if (length > reach + EPS) return { error: `Too far: it reaches ${fmt(reach)} m (that's ${fmt(length)} m)`, dest };
-    return { from, path, dest, length };
+    return { from, path, dest, length, flight };
   }
 
   // ---------- area attacks ----------
-  // An area attack is a circle. Its centre depends on the technique's aim:
-  //   self:    on the attacker, wherever they are when it lands (the default);
-  //   release: built up, then released at a target: on wherever that target is when it lands;
-  //   set:     built up at a spot picked when it starts, within the technique's bands, in sight.
-  // Its radius grows with madra, up to the edge of its farthest band (centred on you) or
-  // AIMED_AREA_MAX (aimed). It hits everything inside with a clear line from the centre.
+  // An area attack is a circle, fixed in place before anyone can react to it. Its centre
+  // depends on the technique's aim:
+  //   self: on the attacker, wherever they are when it lands (the default);
+  //   set:  at a spot picked when it starts, within the technique's reach, in sight.
+  // Its radius grows with madra, up to AREA_MAX. It hits everything inside with a clear line
+  // from the centre.
   areaRadius(t, madra) {
-    const cap = (t.aim || 'self') === 'self' ? A.BAND_EDGES[Math.max(...t.ranges)] : A.AIMED_AREA_MAX;
-    return Math.min(cap, (t.radius ?? 4) + (t.radiusPerMadra ?? 0.5) * madra);
+    return Math.min(A.AREA_MAX, (t.radius ?? 4) + (t.radiusPerMadra ?? 0.5) * madra);
   }
 
-  // Fill in where an area attack is aimed: the spot for `set` ("x:y", or "them" for the
-  // opponent's spot now), the target for `release` (a construct id, or '' for the opponent).
+  // Fill in where an area set at a point is aimed: "x:y", or "them" for the opponent's spot now.
   // Returns an error message, or null.
   aimArea(f, prof, target) {
-    if (prof.aim === 'release') {
-      prof.aimAt = target || '';
-      prof.target = '';
-      return null;
-    }
     if (prof.aim !== 'set') return null;
     prof.target = '';
     const plan = this.planArea(f, prof, target);
@@ -272,7 +279,7 @@ export class Game {
     if (centre.x < 0 || centre.y < 0 || centre.x > this.arena.width || centre.y > this.arena.height) return { error: 'Outside the arena', centre };
     if (this.arena.obstacles.some((r) => centre.x > r.x && centre.x < r.x + r.w && centre.y > r.y && centre.y < r.y + r.h)) return { error: 'Inside an obstacle', centre };
     const s = this.sight(this.pos(f), centre);
-    if (!prof.ranges.includes(s.band)) return { error: `Too far: it reaches ${prof.ranges.map((r) => R.RANGES[r]).join('/')} (that's ${fmt(s.dist)} m, ${R.RANGES[s.band]})`, centre };
+    if (!R.inReach(this.specOf(prof), s.dist)) return { error: `Too far: it reaches ${R.reachText(this.specOf(prof))} (that's ${fmt(s.dist)} m)`, centre };
     if (s.blockedBy) return { error: `A ${s.blockedBy.name} is in the way`, centre };
     return { centre, dist: s.dist };
   }
@@ -280,12 +287,6 @@ export class Game {
   // Where an area attack's centre is at time t.
   areaCentre(f, prof, t = this.time) {
     if (prof.aim === 'set' && prof.centre) return prof.centre;
-    if (prof.aim === 'release') {
-      const o = this.opponent(f);
-      const c = prof.aimAt ? o.constructs.find((x) => x.id === prof.aimAt) : null;
-      if (c) return this.constructPos(o, c, t);
-      return this.pos(o, t);
-    }
     return this.pos(f, t);
   }
 
@@ -296,17 +297,9 @@ export class Game {
     return { inside: dist <= radius + EPS && !blockedBy, dist, blockedBy, outside: dist > radius + EPS };
   }
 
-  // Would an area attack landing at time t catch the opponent? For a release, the target must
-  // also be within the technique's bands and in sight when it lands.
+  // Would an area attack landing at time t catch the opponent?
   areaLands(f, prof, t) {
     const o = this.opponent(f);
-    if (prof.aim === 'release') {
-      const c = prof.aimAt ? o.constructs.find((x) => x.id === prof.aimAt) : null;
-      if (prof.aimAt && !c) return { ok: false, out: true, why: 'its target is gone' };
-      const s = this.sight(this.pos(f, t), c ? this.constructPos(o, c, t) : this.pos(o, t));
-      if (!prof.ranges.includes(s.band)) return { ok: false, out: true, why: `${c ? c.name : o.name} is out of range (${R.RANGES[s.band]})` };
-      if (s.blockedBy) return { ok: false, out: true, why: `a ${s.blockedBy.name} is in the way` };
-    }
     const centre = this.areaCentre(f, prof, t);
     const k = this.areaCatch(centre, prof.radius, this.pos(o, t));
     if (k.inside) return { ok: true, centre, dist: k.dist };
@@ -317,19 +310,13 @@ export class Game {
     const o = this.opponent(f);
     const l = this.areaLands(f, prof, landAt);
     const later = landAt > this.time + EPS;
-    const near = later && !(prof.aim === 'release' && !prof.aimAt);
-    if (l.ok) return { warning: null, note: near ? `${o.name} will be ${fmt(l.dist)} m from the centre when it lands (t=${fmt(landAt)})` : null };
+    if (l.ok) return { warning: null, note: later ? `${o.name} will be ${fmt(l.dist)} m from the centre when it lands` : null };
     return { warning: `${later ? 'When it lands, ' : ''}${l.why}: ${l.out ? 'wasted' : 'it only hits what is inside'}, unless someone moves`, note: null };
   }
 
   areaLine(f, prof) {
-    const o = this.opponent(f);
     const r = `${fmt(prof.radius)} m`;
     if (prof.aim === 'set') return `Forms at (${fmt(prof.centre.x)}, ${fmt(prof.centre.y)}): everything within ${r} of it, wherever anyone moves`;
-    if (prof.aim === 'release') {
-      const c = prof.aimAt ? o.constructs.find((x) => x.id === prof.aimAt) : null;
-      return `Released at ${c ? `${o.name}'s ${c.name}` : o.name} when it lands (${prof.ranges.map((x) => R.RANGES[x]).join('/')}): everything within ${r} of ${c ? 'it' : 'them'}`;
-    }
     return `Hits everything within ${r} of you when it lands, in sight`;
   }
 
@@ -399,9 +386,9 @@ export class Game {
       sharpness: p.sharpness + this.stanceSharpness(f),
       ranges: t.ranges,
       bestRange: t.bestRange ?? t.ranges[0],
+      reachSpec: this.specOf(t),
       area: !!t.area,
-      ...(t.area ? { aim: t.aim || 'self', radius: this.areaRadius(t, madra) } : {}),
-      pure: !!p.pureMadra && !t.physical && t.dtype !== 'physical',
+      ...(t.area ? { aim: t.aim === 'set' ? 'set' : 'self', radius: this.areaRadius(t, madra) } : {}),
       hits: 1,
       bladeHits: !!t.bladeHits,
       madra,
@@ -442,7 +429,6 @@ export class Game {
       fromConstruct: true,
       overhead: true, // they come down from above: any range, over every obstacle
       ownerName: owner.name,
-      pure: !!this.path(owner).pureMadra,
     };
   }
 
@@ -454,84 +440,108 @@ export class Game {
     return hits;
   }
 
-  // A dodge helps less against each extra hit of an attack: full bonus on the first hit,
-  // 1 less on each hit after it, down to 0.
-  dodgeBonusFor(defender, attacker, hitIndex = 0) {
-    return Math.max(0, R.dodgeBonus(this.speed(defender), this.speed(attacker)) - hitIndex);
-  }
-
-  defense(attacker, defender, dodging, hitIndex = 0) {
+  // Defense against rolled attacks: 6 + Perception + the speed modifier, and a dodge adds its
+  // bonus to every hit of the attack.
+  defense(attacker, defender, dodging) {
     const sm = R.speedMod(this.speed(defender), this.speed(attacker));
     let d = 6 + defender.stats.perception + sm;
-    if (dodging) d += this.dodgeBonusFor(defender, attacker, hitIndex);
+    if (dodging) d += R.dodgeBonus(this.speed(defender), this.speed(attacker));
     return d;
   }
 
-  // Range penalty between the fighters (or at a given band, for a construct).
-  rangePenalty(prof, band = this.band()) {
-    return prof.area ? 0 : R.rangePenalty(band, prof.bestRange);
+  // Range penalty for an attack from f's position: by the distance to the opponent now, or the given distance.
+  rangePenalty(prof, d = this.gap()) {
+    return prof.area || prof.overhead ? 0 : R.rangePenalty(d, this.specOf(prof));
   }
 
   // Area attacks don't roll, so they always hit.
-  hitChance(attacker, defender, prof, dodging = false, hitIndex = 0) {
+  hitChance(attacker, defender, prof, dodging = false) {
     if (prof.area) return 1;
-    const need = this.defense(attacker, defender, dodging, hitIndex) - attacker.stats.precision - prof.toHit + this.rangePenalty(prof);
+    const need = this.defense(attacker, defender, dodging) - attacker.stats.precision - prof.toHit + this.rangePenalty(prof);
     return R.chanceAtLeast(need);
   }
 
+  constructDist(attacker, c) { return this.sight(this.pos(attacker), this.constructPos(this.ownerOf(c), c)).dist; }
+
   constructHitChance(attacker, prof, c) {
     if (prof.area) return 1;
-    const pen = R.rangePenalty(this.sight(this.pos(attacker), this.constructPos(this.ownerOf(c), c)).band, prof.bestRange);
+    const pen = this.rangePenalty(prof, this.constructDist(attacker, c));
     return R.chanceAtLeast(CONSTRUCT_DEFENSE - attacker.stats.precision - prof.toHit + pen);
   }
 
   hitText(attacker, defender, prof) {
     if (prof.area) return 'area attack, no roll';
     const pen = this.rangePenalty(prof);
-    return `${pct(this.hitChance(attacker, defender, prof))} to hit${pen ? ` (−${pen} range)` : ''}`;
+    return `${pct(this.hitChance(attacker, defender, prof))} to hit${pen ? ` (−${pen} at ${fmt(this.gap())} m)` : ''}`;
   }
 
-  // What one hit does to a fighter. Pure: doesn't change anything.
-  //   Hollow Armor halves technique and spiritual damage; a barrier soaks physical, technique and
-  //   pure-madra damage first (other spiritual hits pass through), losing double HP to pure madra;
-  //   then damage reduction: Spirit/10
-  //   for spiritual hits, otherwise Toughness (less sharpness) plus stance reduction, plus any block.
+  // What one hit does to a fighter. Pure: doesn't change anything. In order:
+  //   Hollow Armor halves technique and spiritual damage;
+  //   damage reduction comes off: Spirit/10 for spiritual hits, otherwise Toughness (less
+  //   sharpness) plus stance reduction;
+  //   what gets through is soaked by a barrier (not spiritual hits), then by a block (blockLeft:
+  //   what the block has left to soak, shared by the attack's hits).
   //   Spiritual damage goes to the spirit track and counts double against thresholds.
-  hitResult(att, def, prof, { dodging = false, blockDR = 0, barrierHp = null, hitIndex = 0 } = {}) {
+  hitResult(att, def, prof, { blockLeft = 0, barrierHp = null } = {}) {
     let raw = prof.damage;
-    if (prof.area && dodging) raw *= 1 - R.areaDodgeReduction(this.dodgeBonusFor(def, att, hitIndex));
     if (prof.dtype !== 'physical' && this.stanceFlag(def, 'halvesTechniques')) raw *= 0.5;
-    let absorbed = 0;
-    let barrierLoss = 0;
+    const spiritual = prof.dtype === 'spiritual';
+    const dr = spiritual ? def.stats.spirit / 10 : Math.max(0, def.stats.toughness - prof.sharpness) + this.stanceDR(def);
+    let through = Math.max(0, raw - dr);
     const barrier = this.barrier(def);
     const bhp = barrierHp ?? (barrier ? barrier.hp : 0);
-    if (bhp > 0 && (prof.dtype !== 'spiritual' || prof.pure)) {
-      const rate = prof.pure ? 2 : 1;
-      absorbed = Math.min(bhp / rate, raw);
-      barrierLoss = absorbed * rate;
-      raw -= absorbed;
-    }
-    const spiritual = prof.dtype === 'spiritual';
-    const block = blockDR;
-    const dr = spiritual
-      ? def.stats.spirit / 10 + block
-      : Math.max(0, def.stats.toughness - prof.sharpness) + this.stanceDR(def) + block;
-    const dmg = Math.max(0, Math.round(raw - dr));
+    const absorbed = !spiritual && bhp > 0 ? Math.min(bhp, through) : 0;
+    through -= absorbed;
+    const blocked = Math.min(Math.max(0, blockLeft), through);
+    through -= blocked;
+    const dmg = Math.max(0, Math.round(through));
     const pressure = spiritual ? dmg * 2 : dmg;
-    const stanceLimit = this.stanceThreshold(def);
     return {
       dmg,
       absorbed,
-      barrierLoss,
+      blocked,
       track: spiritual ? 'spirit' : 'health',
       interrupts: dmg > 0 && pressure >= this.threshold(def) - EPS,
-      breaksStances: dmg > 0 && pressure >= stanceLimit - EPS && this.activeStances(def).length > 0,
+      breaksStances: dmg > 0 && pressure >= this.stanceThreshold(def) - EPS && this.activeStances(def).length > 0,
     };
   }
 
-  // Damage a hit does to a construct: no reduction; spiritual and pure-madra hits do double (not both).
+  // Every hit of an attack in turn, as if all land: the barrier and the block soak what each
+  // hit gets through until they run out.
+  hitResults(att, def, prof, hits, block = 0) {
+    const barrier = this.barrier(def);
+    let barrierHp = barrier ? barrier.hp : 0;
+    let blockLeft = block;
+    return this.hitProfiles(prof, hits).map((hp) => {
+      const res = this.hitResult(att, def, hp, { blockLeft, barrierHp });
+      barrierHp -= res.absorbed;
+      blockLeft -= res.blocked;
+      return res;
+    });
+  }
+
+  // Damage a hit does to a construct: no reduction; spiritual hits do double.
   constructDamage(prof, raw = prof.damage) {
-    return Math.round(raw * (prof.dtype === 'spiritual' || prof.pure ? 2 : 1));
+    return Math.round(raw * (prof.dtype === 'spiritual' ? 2 : 1));
+  }
+
+  // A dodge against an area attack is a sidestep straight out from its centre, as far as the
+  // defender's Speed carries them and the walls and obstacles allow. It avoids the attack if it
+  // ends outside the circle or behind cover.
+  sidestep(def, prof) {
+    const from = this.pos(def);
+    const centre = prof.centre || this.pos(this.opponent(def));
+    const d = A.dist(from, centre);
+    const ux = d > EPS ? (from.x - centre.x) / d : 1;
+    const uy = d > EPS ? (from.y - centre.y) / d : 0;
+    const reach = R.sidestep(this.speed(def));
+    let to = from;
+    for (let k = 1; k > 0.04; k -= 0.05) {
+      const q = { x: from.x + ux * reach * k, y: from.y + uy * reach * k };
+      if (A.standable(this.arena, q) && A.straight(this.arena, from, q)) { to = q; break; }
+    }
+    const k = this.areaCatch(centre, prof.radius, to);
+    return { to, metres: A.dist(from, to), reach, escapes: !k.inside, needs: Math.max(0, prof.radius - d) };
   }
 
   // ---------- turn options ----------
@@ -547,10 +557,10 @@ export class Game {
     ];
     // Single-target attacks can be aimed at the opponent or one of their (non-barrier) constructs
     // that the attack can reach.
-    const withTargets = (opt, ranges) => {
+    const withTargets = (opt, reach) => {
       const where = (c) => this.sight(this.pos(f), this.constructPos(o, c));
-      const targets = o.constructs.filter((c) => c.kind !== 'barrier' && ranges.includes(where(c).band) && !where(c).blockedBy)
-        .map((c) => ({ id: c.id, label: `${o.name}'s ${c.name} (${fmt(c.hp)} HP, ${c.kind === 'star' ? 'overhead' : R.RANGES[where(c).band]})` }));
+      const targets = o.constructs.filter((c) => c.kind !== 'barrier' && this.reaches(reach, this.pos(f), this.constructPos(o, c)))
+        .map((c) => ({ id: c.id, label: `${o.name}'s ${c.name} (${fmt(c.hp)} HP, ${c.kind === 'star' ? 'overhead, ' : ''}${fmt(where(c).dist)} m)` }));
       return targets.length ? { ...opt, targets: [{ id: '', label: o.name }, ...targets] } : opt;
     };
     opts[0] = withTargets(opts[0], [0]);
@@ -577,7 +587,7 @@ export class Game {
         const min = t.minMadra || 1;
         opt.slider = { label: 'Madra', min, max, step: 1, initial: Math.max(min, Math.min(10, max)) };
       }
-      if (t.kind === 'attack' && (!t.area || t.aim === 'release')) opt = withTargets(opt, t.ranges);
+      if (t.kind === 'attack' && !t.area) opt = withTargets(opt, t);
       if (t.kind === 'attack' && t.area && t.aim === 'set') opt.point = { area: true };
       opts.push(opt);
     }
@@ -656,6 +666,7 @@ export class Game {
     return [
       `To (${fmt(plan.dest.x)}, ${fmt(plan.dest.y)}): ${fmt(plan.length)} m${plan.path.length > 1 ? ' around obstacles' : ''} · arrives t=${fmt(arrive)} · next turn ${nextIn > travel + EPS ? `in ${fmt(nextIn)}` : 'then'}`,
       `${o.name} will be ${fmt(gap)} m away (${R.RANGES[A.bandOf(gap)]})${o.moving ? ` counting their move` : ''}`,
+      ...(this.leavesClose(f, plan) && !plan.flight ? [`Leaving Close: ${o.name} may strike you as you go`] : []),
       'Attacks that land while you move are aimed at where you are by then',
     ];
   }
@@ -681,7 +692,7 @@ export class Game {
   pulseProfile(f, t, madra) {
     return {
       name: t.name, damage: 0, dtype: 'technique', toHit: 0, sharpness: 0, ranges: t.ranges, bestRange: t.ranges[0],
-      area: true, hits: 1, madra, effect: 'pulse', pure: !!this.path(f).pureMadra,
+      area: true, hits: 1, madra, effect: 'pulse',
     };
   }
 
@@ -743,14 +754,20 @@ export class Game {
   }
 
   // ---------- reactions ----------
+  // The defender's options against an attack that is landing. Every defense is one of three:
+  //   take it (static defenses: reduction, stances, barrier), dodge (time), block (madra);
+  // plus whatever a stance adds (the Mantle's redirect). Dodge and block can go together.
   reactionOptions() {
     const p = this.prompt;
     const a = p.attack;
     const att = this.fighters[a.attacker];
     const def = this.fighters[p.fighter];
-    // Pure madra makes blocks (and reinforcing a construct) cost double.
-    const factor = R.blockCostFactor(a.hits) * (a.profile.pure ? 2 : 1);
-    const block = (chance) => ({ chance, factor, hits: a.hits, maxBase: Math.floor(this.maxMadra(def) / factor), delay: R.TIMING.blockDelay });
+    // A block soaks 1.5 damage per madra, in all, across the attack's hits. zeroAt: the block
+    // that would soak everything that gets through.
+    const block = (chance, total = 0) => ({
+      chance, factor: 1, hits: a.hits, maxBase: this.maxMadra(def), delay: R.TIMING.blockDelay,
+      soakPerMadra: R.blockReduction(1), zeroAt: Math.min(this.maxMadra(def), Math.ceil(total / R.blockReduction(1) - EPS)),
+    });
     const c = a.construct ? def.constructs.find((x) => x.id === a.construct) : null;
     if (c) {
       // Defending a construct: no dodge or redirect, only reinforcing it with madra (a block).
@@ -759,8 +776,8 @@ export class Game {
       return {
         construct: c,
         take: { chance, damage: dmg, damageText: `${dmg}` },
-        dodge: { available: false, chance, bonus: 0, reduction: 0, delay: 0 },
-        block: block(chance),
+        dodge: { available: false, chance, chances: [chance], bonus: 0, bonuses: [0], reduction: 0, delay: 0 },
+        block: block(chance, dmg * a.hits),
         redirect: { available: false, shown: false, cost: 0 },
       };
     }
@@ -768,26 +785,31 @@ export class Game {
     const canRedirect = this.stanceFlag(def, 'redirect') && !a.profile.area && a.profile.dtype !== 'physical'
       && !a.profile.fromConstruct && (a.profile.madra || 0) > 0;
     const chance = this.hitChance(att, def, a.profile);
-    const each = this.hitProfiles(a.profile, a.hits).map((hp) => this.hitResult(att, def, hp).dmg);
+    const pulse = a.profile.effect === 'pulse';
+    const results = pulse ? [] : this.hitResults(att, def, a.profile, a.hits);
+    const each = results.map((r) => r.dmg);
     const bonus = R.dodgeBonus(this.speed(def), this.speed(att));
+    const dodgeChance = this.hitChance(att, def, a.profile, true);
+    // Against an area, a dodge is a sidestep: it gets you out or it doesn't.
+    const step = a.profile.area && !pulse ? this.sidestep(def, a.profile) : null;
     return {
-      take: { chance, damage: each[0], damageText: a.profile.hitDamages ? each.join(' + ') : `${each[0]}` },
+      take: { chance, damage: each[0] || 0, damageText: a.profile.hitDamages ? each.join(' + ') : `${each[0] || 0}` },
       dodge: {
-        available: a.profile.effect !== 'pulse',
-        chance: this.hitChance(att, def, a.profile, true),
-        // Chance to hit for each hit of the attack while dodging (the dodge tapers off).
-        chances: Array.from({ length: a.hits }, (_, i) => this.hitChance(att, def, a.profile, true, i)),
-        bonuses: Array.from({ length: a.hits }, (_, i) => Math.max(0, bonus - i)),
+        available: !pulse,
+        chance: dodgeChance,
+        chances: Array.from({ length: a.hits }, () => dodgeChance),
+        bonuses: Array.from({ length: a.hits }, () => bonus),
         bonus,
-        reduction: a.profile.area ? R.areaDodgeReduction(bonus) : 0,
+        sidestep: step && { metres: step.metres, reach: step.reach, escapes: step.escapes, needs: step.needs },
+        reduction: step ? (step.escapes ? 1 : 0) : 0,
         delay: R.physTime(R.TIMING.dodge, this.speed(def)),
       },
-      block: block(chance),
+      block: block(chance, pulse ? a.profile.madra : each.reduce((s, d) => s + d, 0)),
       redirect: { available: canRedirect && def.madra >= redirectCost, shown: canRedirect, cost: redirectCost },
     };
   }
 
-  // The base madra of a block (before the multi-hit and pure-madra factors), within what the defender can channel.
+  // The madra put into a block, within what the defender can channel.
   blockAmount(ro, blockBase) {
     return Math.min(Math.max(0, Math.round(blockBase)), ro.block.maxBase);
   }
@@ -805,8 +827,10 @@ export class Game {
     const dodging = choice === 'dodge' || choice === 'dodgeBlock';
     const blocking = choice === 'block' || choice === 'dodgeBlock';
     // A pulse or an attack on a construct can only be blocked on its own, not with a dodge.
-    const m = (pulse || ro.construct ? choice === 'block' : blocking) ? this.blockAmount(ro, blockBase) : 0;
-    const madraCost = m * ro.block.factor;
+    const escapes = dodging && ro.dodge.sidestep && ro.dodge.sidestep.escapes;
+    // A sidestep that gets you out of an area means the block isn't needed, so it isn't spent.
+    const m = escapes ? 0 : (pulse || ro.construct ? choice === 'block' : blocking) ? this.blockAmount(ro, blockBase) : 0;
+    const madraCost = m;
     const blockDelay = m > 0 ? R.TIMING.blockDelay : 0;
     if (pulse) {
       const strength = Math.max(0, a.profile.madra - R.blockReduction(m));
@@ -817,23 +841,27 @@ export class Game {
       };
     }
     if (ro.construct) {
-      const per = Math.max(0, Math.round(ro.take.damage - R.blockReduction(m)));
+      const total = Math.max(0, Math.round(ro.take.damage * a.hits - R.blockReduction(m)));
       return {
-        perHit: per, total: per * a.hits, perHitText: null, track: 'construct', absorbed: 0, hits: a.hits,
+        perHit: Math.round(total / a.hits), total, perHitText: null, track: 'construct', absorbed: 0, hits: a.hits,
         chance: ro.take.chance, madraCost, delay: blockDelay,
         interrupts: false, breaksStances: false, construct: ro.construct,
       };
     }
-    const each = this.hitProfiles(a.profile, a.hits).map((hp, i) => this.hitResult(att, def, hp, { dodging, blockDR: R.blockReduction(m), hitIndex: i }));
+    const each = escapes
+      ? this.hitProfiles(a.profile, a.hits).map(() => ({ dmg: 0, absorbed: 0, blocked: 0, track: a.profile.dtype === 'spiritual' ? 'spirit' : 'health', interrupts: false, breaksStances: false }))
+      : this.hitResults(att, def, a.profile, a.hits, R.blockReduction(m));
     const res = each[0];
     return {
       perHit: res.dmg,
       total: each.reduce((s, r) => s + r.dmg, 0),
-      perHitText: a.profile.hitDamages ? each.map((r) => r.dmg).join(' + ') : null,
+      perHitText: a.profile.hitDamages || a.hits > 1 ? each.map((r) => r.dmg).join(' + ') : null,
       track: res.track,
-      absorbed: res.absorbed,
+      absorbed: each.reduce((s, r) => s + r.absorbed, 0),
+      blocked: each.reduce((s, r) => s + r.blocked, 0),
+      escapes: !!escapes,
       hits: a.hits,
-      chance: a.profile.area ? 1 : dodging ? ro.dodge.chance : ro.take.chance,
+      chance: a.profile.area ? (escapes ? 0 : 1) : dodging ? ro.dodge.chance : ro.take.chance,
       chances: a.profile.area ? null : dodging ? ro.dodge.chances : null,
       madraCost,
       delay: (dodging ? ro.dodge.delay : 0) + blockDelay,
@@ -854,6 +882,7 @@ export class Game {
     out.notes[def.index] = o.pulse ? (o.pulse.targets.length ? `${o.pulse.targets.map((x) => x.name).join(', ')} break` : 'nothing breaks')
       : o.construct ? `${o.construct.name}: −${o.total} HP if it hits (${pct(o.chance)})`
       : choice === 'redirect' ? 'thrown back'
+      : o.escapes ? 'steps out of it'
       : a.profile.area ? `${o.hits > 1 ? `${o.hits} hits, ` : ''}no roll`
       : `if ${o.hits > 1 ? `all ${o.hits} hit` : 'it hits'} (${pct(o.chance)}${o.hits > 1 ? ' each' : ''})`;
     if (o.delay) {
@@ -885,7 +914,54 @@ export class Game {
     p.apply();
     f.nextTurn = p.nextTurn;
     this.prompt = null;
+    // Walking out of Close: the opponent may strike as they go.
+    if (key === 'move' && p.move && this.leavesClose(f, p.move)) {
+      this.prompt = { kind: 'opportunity', fighter: o.index, mover: f.index };
+      this.decision++;
+      return;
+    }
     this.advance();
+  }
+
+  // ---------- opportunity strikes ----------
+  // When a fighter walks out of Close range, the opponent may strike them as they go. The strike
+  // lands at once, and pushes the striker's next turn back by the strike's time.
+  opportunityOptions() {
+    const p = this.prompt;
+    if (!p || p.kind !== 'opportunity') return null;
+    const f = this.fighters[p.fighter];
+    const mover = this.fighters[p.mover];
+    const prof = this.attackProfile(f, 'strike');
+    const hits = this.hitsAgainst(f, mover, prof);
+    const res = this.hitResults(f, mover, prof, hits);
+    return {
+      mover: mover.name,
+      strike: {
+        chance: this.hitChance(f, mover, prof),
+        damageText: res.map((r) => r.dmg).join(' + '),
+        hits,
+        delay: R.physTime(R.TIMING.strikeWindup, this.speed(f)),
+        interrupts: res.some((r) => r.interrupts),
+      },
+    };
+  }
+
+  opportunity(choice) {
+    const p = this.prompt;
+    if (!p || p.kind !== 'opportunity' || (choice !== 'strike' && choice !== 'let')) return;
+    const f = this.fighters[p.fighter];
+    const mover = this.fighters[p.mover];
+    this.prompt = null;
+    if (choice === 'let') {
+      this.addLog(`${f.name} lets ${mover.name} go.`, 'dim', f.index);
+      this.advance();
+      return;
+    }
+    const delay = R.physTime(R.TIMING.strikeWindup, this.speed(f));
+    f.nextTurn += delay;
+    this.addLog(`${f.name} strikes at ${mover.name} as they leave (next turn ${fmt(delay)} later).`, '', f.index);
+    const profile = { ...this.attackProfile(f, 'strike'), target: '' };
+    this.askReaction(mover, { attacker: f.index, profile, hits: this.hitsAgainst(f, mover, profile) });
   }
 
   startMove(f, plan, travel, via = '') {
@@ -939,8 +1015,9 @@ export class Game {
     if (choice === 'redirect' && !ro.redirect.available) return;
     const dodging = choice === 'dodge' || choice === 'dodgeBlock';
     const blocking = choice === 'block' || choice === 'dodgeBlock';
-    const m = blocking ? this.blockAmount(ro, blockBase) : 0;
-    const cost = m * ro.block.factor;
+    const step = dodging && ro.dodge.sidestep ? this.sidestep(def, a.profile) : null;
+    const m = blocking && !(step && step.escapes) ? this.blockAmount(ro, blockBase) : 0;
+    const cost = m;
     const dr = R.blockReduction(m);
     const payBlock = () => { this.spend(def, cost, false); def.nextTurn += R.TIMING.blockDelay; };
 
@@ -957,26 +1034,41 @@ export class Game {
     } else if (c) {
       if (m > 0) {
         payBlock();
-        this.addLog(`${def.name} reinforces ${c.name} with ${fmt(cost)} madra (−${fmt(dr)} damage${a.hits > 1 ? ' on each hit' : ''}).`, '', def.index);
+        this.addLog(`${def.name} reinforces ${c.name} with ${fmt(cost)} madra (soaks ${fmt(dr)}).`, '', def.index);
       } else this.addLog(`${def.name} leaves ${c.name} to take it.`, 'dim', def.index);
     } else {
       if (dodging) {
         def.nextTurn += ro.dodge.delay;
-        this.addLog(a.profile.area
-          ? `${def.name} dodges (−${pct(ro.dodge.reduction)} area damage).`
-          : `${def.name} dodges (+${ro.dodge.bonus} Defense).`, '', def.index);
+        if (step) {
+          this.stepTo(def, step.to);
+          this.addLog(step.escapes
+            ? `${def.name} sidesteps ${fmt(step.metres)} m, out of it.`
+            : `${def.name} sidesteps ${fmt(step.metres)} m, but is still inside.`, '', def.index);
+        } else this.addLog(`${def.name} dodges (+${ro.dodge.bonus} Defense).`, '', def.index);
       }
       if (m > 0) {
         payBlock();
-        this.addLog(`${def.name} blocks with ${fmt(cost)} madra (−${fmt(dr)} damage on ${a.hits > 1 ? `each of ${a.hits} hits` : 'the hit'}).`, '', def.index);
+        this.addLog(`${def.name} blocks with ${fmt(cost)} madra (soaks up to ${fmt(dr)}${a.hits > 1 ? ` across ${a.hits} hits` : ''}).`, '', def.index);
       }
-      if (!dodging && !blocking) this.addLog(`${def.name} lets it come.`, 'dim', def.index);
+      if (!dodging && m === 0) this.addLog(`${def.name} lets it come.`, 'dim', def.index);
     }
     this.prompt = null;
     if (pulse) this.applyPulse(att, def, a.profile, dr);
     else if (c) this.resolveConstructAttack(att, def, a.profile, c, dr);
-    else if (choice !== 'redirect') this.resolveAttack(att, def, a.profile, a.hits, dodging, dr);
+    else if (step && step.escapes) {
+      this.addLog(`${att.name}'s ${a.profile.name} misses ${def.name}.`, 'miss', att.index);
+      if (a.profile.area) this.areaConstructHits(att, def, a.profile, a.hits);
+    } else if (choice !== 'redirect') this.resolveAttack(att, def, a.profile, a.hits, dodging && !step, dr);
     this.advance();
+  }
+
+  // A sidestep: the fighter ends up at `to`, and any move in progress stops there.
+  stepTo(f, to) {
+    if (f.moving) {
+      this.events = this.events.filter((e) => !(e.actor === f.index && e.action.kind === 'move'));
+      f.moving = null;
+    }
+    f.pos = { x: Math.round(to.x * 10) / 10, y: Math.round(to.y * 10) / 10 };
   }
 
   rollHit(att, defense, prof, pen = this.rangePenalty(prof)) {
@@ -986,15 +1078,16 @@ export class Game {
     return { hit: total >= defense, text };
   }
 
-  resolveAttack(att, def, prof, hits, dodging, blockDR) {
+  resolveAttack(att, def, prof, hits, dodging, block) {
     const perHit = this.hitProfiles(prof, hits);
+    let blockLeft = block;
     for (let i = 0; i < hits; i++) {
       if (this.checkEnd()) return;
       const hp = perHit[i];
       const label = hits > 1 ? `${prof.name} (hit ${i + 1}/${hits})` : prof.name;
       let rollText = 'area attack, no roll';
       if (!prof.area) {
-        const roll = this.rollHit(att, this.defense(att, def, dodging, i), hp);
+        const roll = this.rollHit(att, this.defense(att, def, dodging), hp);
         rollText = roll.text;
         if (!roll.hit) {
           this.addLog(`${att.name}'s ${label} misses. ${rollText}`, 'miss', att.index);
@@ -1006,8 +1099,10 @@ export class Game {
         this.disrupt(def, prof);
         continue;
       }
-      const res = this.hitResult(att, def, hp, { dodging, blockDR, hitIndex: i });
-      const soak = res.absorbed ? ` (barrier soaks ${fmt(res.absorbed)})` : '';
+      const res = this.hitResult(att, def, hp, { blockLeft });
+      blockLeft -= res.blocked;
+      const soaked = [res.absorbed ? `barrier soaks ${fmt(res.absorbed)}` : '', res.blocked ? `block soaks ${fmt(res.blocked)}` : ''].filter(Boolean);
+      const soak = soaked.length ? ` (${soaked.join(', ')})` : '';
       this.addLog(`${att.name}'s ${label} hits ${def.name} for ${res.dmg}${res.track === 'spirit' ? ' spirit' : ''}${soak}. ${rollText}`, 'hit', att.index);
       this.applyHit(def, res);
     }
@@ -1019,7 +1114,7 @@ export class Game {
   applyHit(def, res) {
     if (res.absorbed) {
       const b = this.barrier(def);
-      b.hp -= res.barrierLoss || res.absorbed;
+      b.hp -= res.absorbed;
       if (b.hp < 0.5) {
         def.constructs = def.constructs.filter((c) => c !== b);
         this.addLog(`${def.name}'s ${b.name} shatters.`, 'warn', def.index);
@@ -1098,7 +1193,7 @@ export class Game {
       return c ? `${this.constructDamage(boosted)} damage to ${o.name}'s ${c.name} (${fmt(c.hp)} HP) · ${pct(this.constructHitChance(f, boosted, c))} to hit` : '';
     }
     const hits = this.hitsAgainst(f, o, boosted);
-    const each = this.hitProfiles(boosted, hits).map((hp) => this.hitResult(f, o, hp));
+    const each = this.hitResults(f, o, boosted, hits);
     const track = each[0].track === 'spirit' ? ' spirit' : '';
     const dmg = boosted.hitDamages || hits > 1 ? `${each.map((r) => r.dmg).join(' + ')}${track} damage` : `${each[0].dmg}${track} damage`;
     const roll = boosted.area ? 'area attack, no roll' : `${pct(this.hitChance(f, o, boosted))} to hit${hits > 1 ? ' each' : ''}`;
@@ -1240,7 +1335,7 @@ export class Game {
     }
     if (!profile0.target && !profile0.overhead) {
       const s = this.sight(this.pos(f), this.pos(o));
-      if (!profile0.ranges.includes(s.band)) {
+      if (!R.inReach(this.specOf(profile0), s.dist)) {
         this.addLog(`${f.name}'s ${profile0.name} lands, but ${o.name} is out of range (${fmt(s.dist)} m).`, 'miss', f.index);
         return;
       }
@@ -1250,8 +1345,7 @@ export class Game {
       }
     }
     if (a.kind === 'pulse') {
-      const factor = R.blockCostFactor(1) * (profile0.pure ? 2 : 1);
-      if (this.pulseTargets(o, profile0.madra, profile0.ranges).length && this.maxMadra(o) >= factor) {
+      if (this.pulseTargets(o, profile0.madra, profile0.ranges).length && this.maxMadra(o) >= 1) {
         this.askReaction(o, { attacker: f.index, profile: profile0, hits: 1 });
         return;
       }
@@ -1319,15 +1413,14 @@ export class Game {
     this.askReaction(o, { attacker: f.index, profile, hits: this.hitsAgainst(f, o, profile) });
   }
 
-  resolveConstructAttack(att, owner, prof, c, blockDR) {
-    const band = this.sight(this.pos(att), this.constructPos(owner, c)).band;
-    const roll = this.rollHit(att, CONSTRUCT_DEFENSE, prof, this.rangePenalty(prof, band));
+  resolveConstructAttack(att, owner, prof, c, block) {
+    const roll = this.rollHit(att, CONSTRUCT_DEFENSE, prof, this.rangePenalty(prof, this.constructDist(att, c)));
     if (!roll.hit) {
       this.addLog(`${att.name}'s ${prof.name} misses ${owner.name}'s ${c.name}. ${roll.text}`, 'miss', att.index);
       return;
     }
-    const per = Math.max(0, Math.round(this.constructDamage(prof) - blockDR));
-    this.damageConstruct(owner, c, per * prof.hits, `${att.name}'s ${prof.name}`, roll.text);
+    const total = Math.max(0, Math.round(this.constructDamage(prof) * prof.hits - block));
+    this.damageConstruct(owner, c, total, `${att.name}'s ${prof.name}`, roll.text);
   }
 
   formPiece(f, t, madra, n, of) {

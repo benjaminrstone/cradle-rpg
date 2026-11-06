@@ -17,16 +17,15 @@ const MIN_R = (def = 0) => pick('minRange', 'Closest range', RANGE_OPTS, def);
 const MAX_R = (def = 1) => pick('maxRange', 'Farthest range', RANGE_OPTS, def);
 // Area attacks: where the circle goes, and how big it is.
 const AREA_KNOBS = [
-  pick('aim', 'Aim', [['self', 'Around you'], ['release', 'Released at a target'], ['set', 'Set at a point']], 'self'),
+  pick('aim', 'Aim', [['self', 'Around you'], ['set', 'Set at a point']], 'self'),
   num('radius', 'Radius (m)', 1, 8, 0.5, 4),
   num('radiusPerMadra', 'Radius per madra (m)', 0, 1, 0.05, 0.5),
 ];
-const areaFields = (k) => ({ aim: k.aim !== 'self' ? k.aim : undefined, radius: k.radius, radiusPerMadra: k.radiusPerMadra });
+const areaFields = (k) => ({ aim: k.aim === 'set' ? 'set' : undefined, radius: k.radius, radiusPerMadra: k.radiusPerMadra });
 const areaText = (k) => {
   const size = `${k.radius} m${k.radiusPerMadra ? ` + ${k.radiusPerMadra} m per madra` : ''}`;
-  if (k.aim === 'release') return `released at a target ${span(k.minRange, k.maxRange)} from you when it lands: everything within ${size} of them (up to 14 m)`;
   if (k.aim === 'set') return `set at a spot you pick, ${span(k.minRange, k.maxRange)} from you and in sight: everything within ${size} of it (up to 14 m), wherever anyone moves`;
-  return `centred on you: everything within ${size} of you (up to the edge of ${R[k.maxRange]})`;
+  return `centred on you: everything within ${size} of you (up to 14 m)`;
 };
 
 // Each template: what it is, its knobs, and how knobs become technique fields and a description.
@@ -90,7 +89,7 @@ export const TEMPLATES = {
     label: 'Star crown (Forger)', type: 'Forger',
     knobs: [num('toHit', 'Star to hit', -1, 2, 1, 0), num('sizeMult', 'Star HP ×', 0.5, 2, 0.25, 1)],
     make: (k) => ({ kind: 'forge', divisor: 2, toHit: k.toHit || undefined, sizeMult: k.sizeMult !== 1 ? k.sizeMult : undefined }),
-    describe: () => 'Forge stars high over your head (always Far), one at a time while you keep acting, then drop any number at once. Each hit is spiritual: 2 × the star’s madra, +1 to hit.',
+    describe: () => 'Forge stars high over your head, one at a time while you keep acting, then drop any number at once. Each hit is spiritual: 2 × the star’s madra, +1 to hit.',
   },
   disrupt: {
     label: 'Disruption (rolled)', type: 'Forger',
@@ -127,7 +126,7 @@ export function compileTechnique(pathId, entry) {
   const base = clean({ id, name: entry.name || tpl.label, type: tpl.type, cost: entry.cost || undefined, desc, ...tpl.make(knobs) });
   if (entry.template !== 'crown') return [base];
   return [
-    { ...base, label: 'Forge a star', card: id, cardDesc: desc, desc: 'Forge one star; the madra you put in sets its size and it forms after madra ÷ 2 ticks, but your next turn comes after 1 tick.' },
+    { ...base, label: 'Forge a star', card: id, cardDesc: desc, desc: 'Forge one star; the madra you put in sets its size and it forms after madra ÷ 2 ticks, but your next turn comes after 1.5 ticks.' },
     { id: `${id}-drop`, name: base.name, label: 'Drop stars', card: id, kind: 'command', type: tpl.type, desc: 'Drop any number of forged stars, biggest first. They land 0.5 ticks later as one attack with a hit per star.' },
   ];
 }
@@ -146,7 +145,6 @@ export function compilePath(draft) {
     signatureStat: draft.signatureStat,
     efficiencyMult: draft.efficiencyMult,
     sharpness: draft.sharpness,
-    pureMadra: draft.pureMadra || undefined,
     selfBurn: draft.selfBurn,
     techniques: draft.techniques.flatMap((e) => compileTechnique(draft.id, e)),
   };
@@ -163,7 +161,6 @@ export function newPathDraft() {
     signatureStat: 'precision',
     efficiencyMult: 1,
     sharpness: 0,
-    pureMadra: false,
     selfBurn: false,
     techniques: [{ uid: 't1', template: 'striker', name: 'New Striker technique', cost: 0, flavor: '', knobs: defaultKnobs('striker') }],
   };

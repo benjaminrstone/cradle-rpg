@@ -7,11 +7,12 @@ export const TIMING = {
   moveRate: 2,          // metres per tick at Speed 100; physical, so scaled by Speed
   moveMin: 0.5,         // the shortest a move takes
   dodge: 2,             // physical, scaled by Speed; pushes your next action later
+  sidestep: 2,          // metres a dodge carries you out of an area at Speed 100, scaled by Speed
   blockDelay: 1,        // pushes your next action later
   waitDefault: 2,
   waitMin: 0.5,
   waitMax: 10,
-  actWhileBuilding: 2,  // Ruler techniques and Forged barriers: next turn this soon after starting
+  actWhileBuilding: 1.5, // techniques that build while you act (Ruler techniques, barriers, Crown stars): next turn this soon after starting
   stanceWindup: 1,      // technique wind-up, scaled by Control
   reraiseDelay: 4,      // scaled by Control
   interruptStagger: 1,  // an interrupted fighter's next action comes this soon
@@ -22,9 +23,9 @@ export function waitTime(t) {
   return Math.min(TIMING.waitMax, Math.max(TIMING.waitMin, Number(t) || TIMING.waitDefault));
 }
 
-// Crown stars: 2 spiritual damage per madra before reduction, +1 to hit. Forging one gives you
-// your next turn after 1 tick; dropping stars takes 0.5 ticks and they land 0.5 ticks later.
-export const STAR = { damagePerMadra: 2, toHit: 1, forgeRecovery: 1, dropTime: 0.5 };
+// Crown stars: 2 spiritual damage per madra before reduction, +1 to hit. Dropping stars takes
+// 0.5 ticks and they land 0.5 ticks later.
+export const STAR = { damagePerMadra: 2, toHit: 1, dropTime: 0.5 };
 
 // Constructs don't dodge; rolled attacks against them need to beat this.
 export const CONSTRUCT_DEFENSE = 10;
@@ -91,12 +92,13 @@ export function interruptThreshold(stats) {
 // Stances are held more firmly than wind-ups: breaking one takes twice the interrupt threshold.
 export const STANCE_BREAK_MULT = 2;
 
-// Dodging an area attack can't avoid it, but cuts its damage by 15% per point of dodge bonus.
-export function areaDodgeReduction(bonus) {
-  return Math.min(0.9, 0.15 * bonus);
+// Dodging an area attack is a quick sidestep straight out of it: this far, scaled by Speed
+// like walking. If it takes you outside (or behind cover), the attack misses you.
+export function sidestep(speed) {
+  return TIMING.sidestep * (speed / 100) ** 2;
 }
 
-// A block takes this much off every hit it covers, per point of base madra.
+// A block soaks this much damage in all, per madra, spread over the attack's hits.
 export function blockReduction(madra) {
   return 1.5 * madra;
 }
@@ -106,13 +108,37 @@ export function burn(madra) {
   return { health: madra / 5, spirit: madra / 10 };
 }
 
-// Blocking several hits: each extra hit covered costs 1.5x the base.
-// 1 hit = 1x, 2 hits = 2.5x, 3 hits = 4x, 4 hits = 5.5x.
-export function blockCostFactor(hits) {
-  return 1 + 1.5 * (hits - 1);
+// ---------- range ----------
+// Distances are in metres. Close, Mid and Far are shorthand for 2, 10 and 20 m.
+export const RANGE_METRES = [2, 10, 20];
+// Past its best distance an attack takes -1 to hit for every this many metres (rounded up).
+export const FALLOFF = 4;
+
+// What a technique (or attack profile) can reach, in metres: { min, max, best }.
+// Written either directly (reach, minReach, best) or as bands (ranges, bestRange): reaching Far
+// means no limit; best at Far means 20 m.
+export function rangeSpec(t) {
+  if (t.reachSpec) return t.reachSpec;
+  const ranges = t.ranges || [0];
+  const top = Math.max(...ranges);
+  const low = Math.min(...ranges);
+  return {
+    min: t.minReach ?? (low > 0 ? RANGE_METRES[low - 1] : 0),
+    max: t.reach ?? (top >= 2 ? Infinity : RANGE_METRES[top]),
+    best: t.best ?? RANGE_METRES[t.bestRange ?? low],
+  };
 }
 
-// -1 to hit for each range band past the attack's best range.
-export function rangePenalty(distance, bestRange) {
-  return Math.max(0, distance - bestRange);
+export const inReach = (spec, d) => d <= spec.max + 1e-6 && d >= spec.min - 1e-6;
+
+// -1 to hit for every FALLOFF metres (or part of it) past the best distance.
+export function rangePenalty(d, spec) {
+  return d <= spec.best + 1e-6 ? 0 : Math.ceil((d - spec.best - 1e-6) / FALLOFF);
+}
+
+// How a reach reads: "Close", "up to 10 m", "any range".
+export function reachText(spec) {
+  if (spec.max === Infinity) return spec.min > 0 ? `${spec.min} m or more` : 'any range';
+  if (spec.max <= RANGE_METRES[0]) return 'Close';
+  return `${spec.min > 0 ? `${spec.min}–` : 'up to '}${spec.max} m`;
 }

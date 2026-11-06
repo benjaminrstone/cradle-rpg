@@ -48,7 +48,7 @@ export const PATHS = {
       {
         id: 'dragonsBreath', name: "Dragon's Breath", kind: 'attack', type: 'Striker',
         divisor: 4, toHit: 1, ranges: [0, 1, 2], bestRange: 1,
-        desc: 'A beam of black fire. +1 to hit. Any range; best at Mid.',
+        desc: 'A beam of black fire. +1 to hit. Any range; best within 10 m.',
       },
       {
         id: 'burningCloak', name: 'Burning Cloak', kind: 'stance', type: 'Enforcer stance',
@@ -58,7 +58,7 @@ export const PATHS = {
       {
         id: 'voidDragonsDance', name: "Void Dragon's Dance", kind: 'attack', type: 'Ruler',
         divisor: 2, toHit: 0, ranges: [0, 1], area: true, radius: 4, radiusPerMadra: 0.5, boostPerMadra: 1, ruler: true,
-        desc: 'Finisher: a long build-up, then a wide blast. Ruler: no channel cap, and you act again soon while it builds. Area attack centred on you, no roll: hits everything you can see within 4 m + 0.5 m per madra of you (up to 14 m). +1 damage per Black Flame madra you spend while it winds up.',
+        desc: 'Finisher: a long build-up, then a wide blast. Ruler: no channel cap, and your next turn comes 1.5 ticks after you start, so you keep acting while it builds. Area attack centred on you, no roll: hits everything you can see within 4 m + 0.5 m per madra of you (up to 14 m). +1 damage per Black Flame madra you spend while it winds up.',
       },
     ],
   },
@@ -78,7 +78,7 @@ export const PATHS = {
       {
         id: 'ripplingSword', name: 'Rippling Sword', kind: 'attack', type: 'Striker',
         divisor: 4, toHit: 0, ranges: [0, 1, 2], bestRange: 1, base: 10, physical: true,
-        desc: 'A strike whose edge extends into a wave of sword aura. Any range; best at Close or Mid (−1 to hit at Far).',
+        desc: 'A strike whose edge extends into a wave of sword aura. Any range; best within 10 m.',
       },
       {
         id: 'flowingSword', name: 'Flowing Sword', kind: 'stance', type: 'Enforcer stance',
@@ -90,18 +90,15 @@ export const PATHS = {
   hollowKing: {
     name: 'Path of the Hollow King',
     signatureStat: 'pool',
-    summary: 'Pure madra: tools for taking techniques apart. Breaks defenses, constructs and stances, and turns attacks back on their owners.',
+    summary: 'Pure madra: tools for taking techniques apart. Spiritual attacks, disruption of stances, constructs and wind-ups, and attacks turned back on their owners.',
     efficiencyMult: 1,
     sharpness: 0,
     selfBurn: false,
-    // Pure madra: blocking it (or reinforcing a construct against it) costs double, and it does
-    // double damage to madra constructs such as barriers and stars.
-    pureMadra: true,
     techniques: [
       {
         id: 'hollowSpear', name: "Hollow King's Spear", kind: 'attack', type: 'Striker',
         divisor: 4, toHit: 1, ranges: [0, 1, 2], bestRange: 1, effMult: 0.85, dtype: 'spiritual',
-        desc: 'Hyper-compressed pure madra: a spiritual attack. Blocks against it cost double, and barriers soak it but take double damage. +1 to hit. Any range; best at Mid.',
+        desc: 'Hyper-compressed pure madra: a spiritual attack, so it passes through barriers and does double damage to constructs. +1 to hit. Any range; best within 10 m.',
       },
       {
         id: 'hollowArmor', name: 'Hollow Armor', kind: 'stance', type: 'Enforcer stance',
@@ -111,8 +108,8 @@ export const PATHS = {
       {
         id: 'crown', name: 'Crown of the Hollow King', label: 'Forge a star', card: 'crown', kind: 'forge', type: 'Forger',
         divisor: 2,
-        cardDesc: 'Forge stars high over your head (always Far), then drop them when the timing is right. Each star is its own construct with HP equal to its madra.',
-        desc: 'Forge one star for the Crown of the Hollow King, high over your head: always Far, and above every obstacle. The madra you put in sets its size; it takes madra ÷ 2 ticks to form, but your next turn comes after 1 tick. Each star is its own construct with HP equal to its madra.',
+        cardDesc: 'Forge stars high over your head, then drop them when the timing is right. Each star is its own construct with HP equal to its madra.',
+        desc: 'Forge one star for the Crown of the Hollow King, 14 m over your head, above every obstacle. The madra you put in sets its size; it takes madra ÷ 2 ticks to form, but your next turn comes after 1.5 ticks. Each star is its own construct with HP equal to its madra.',
       },
       {
         id: 'dropStars', name: 'Crown of the Hollow King', label: 'Drop stars', card: 'crown', kind: 'command', type: 'Forger',
@@ -126,7 +123,7 @@ export const PATHS = {
       {
         id: 'madraPulse', cost: 2, name: 'Madra Pulse', kind: 'pulse', type: 'Striker / Ruler',
         divisor: 6, minMadra: 2, area: true, ranges: [0],
-        desc: 'A wash of pure madra at Close range. It cancels every wind-up, stance and construct of your opponent\u2019s there that cost at most half the madra you put in. They can block it, at double cost: each point of block takes 1.5 off its strength. No damage, no roll.',
+        desc: 'A wash of pure madra at Close range. It cancels every wind-up, stance and construct of your opponent\u2019s there that cost at most half the madra you put in. They can block it: each madra of block takes 1.5 off its strength. No damage, no roll.',
       },
     ],
   },
@@ -146,7 +143,7 @@ export const PATHS = {
       {
         id: 'barrier', name: 'Oathsign: Barrier', label: 'Barrier', ...OATHSIGN, kind: 'construct', type: 'Forger', construct: 'barrier',
         divisor: 3,
-        desc: 'A script-circle shield with HP of 2 × madra, filling in as it builds while you keep acting. It soaks physical, technique and piercing hits aimed at you before they reach you; other spiritual hits pass through it. Casting again adds to it.',
+        desc: 'A script-circle shield with HP of 2 × madra, filling in as it builds while you keep acting. It soaks the physical and technique damage that gets through your reduction; spiritual hits pass through it. Casting again adds to it.',
       },
       {
         id: 'accelerate', name: 'Oathsign: Accelerate', label: 'Accelerate', ...OATHSIGN, kind: 'ring', type: 'Forger',
@@ -161,7 +158,7 @@ export const PATHS = {
       {
         id: 'seal', name: 'Oathsign: Seal', label: 'Seal', ...OATHSIGN, kind: 'disrupt', type: 'Forger',
         fixedCost: 10, windup: 2, toHit: 0, ranges: [0, 1, 2], bestRange: 1,
-        desc: 'A script circle Forged on your opponent. Rolled; if it hits, it breaks all their wind-ups and stances. No damage. Any range; best at Mid.',
+        desc: 'A script circle Forged on your opponent. Rolled; if it hits, it breaks all their wind-ups and stances. No damage. Any range; best within 10 m.',
       },
     ],
   },

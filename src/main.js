@@ -332,6 +332,21 @@ function renderPrompt() {
     return;
   }
 
+  if (p.kind === 'opportunity') {
+    const op = game.opportunityOptions();
+    el.innerHTML = `
+      <div class="prompt-title theme-${f.theme}">${f.name}: ${op.mover} is leaving <span class="muted">t=${fmt(game.time)}</span></div>
+      <div class="incoming">${op.mover} is walking out of Close range. You can strike as they go: it lands at once, and your next turn comes later.</div>
+      <div class="cards">
+        <div class="card"><div class="card-head"><span class="card-name">Strike</span></div>
+          <div class="card-preview"><div>${pct(op.strike.chance)} to hit · ${op.strike.damageText} damage${op.strike.interrupts ? ' · <span class="reason">breaks their wind-ups</span>' : ''}</div><div>Next turn ${fmt(op.strike.delay)} later</div></div>
+          <button data-opp="strike">Strike</button></div>
+        <div class="card"><div class="card-head"><span class="card-name">Let them go</span></div>
+          <div class="card-preview"><div>No cost</div></div><button data-opp="let">Let them go</button></div>
+      </div>`;
+    return;
+  }
+
   if (p.kind === 'reaction') {
     const a = p.attack;
     const att = game.fighters[a.attacker];
@@ -341,13 +356,13 @@ function renderPrompt() {
     const disrupt = a.profile.effect === 'disrupt';
     const pulse = a.profile.effect === 'pulse';
     const what = pulse
-      ? `a ${a.profile.madra}-madra pulse: cancels your wind-ups, stances and constructs that cost ${fmt(a.profile.madra / 2)} or less · each point of block takes 1.5 off its strength, at double cost (pure madra)`
+      ? `a ${a.profile.madra}-madra pulse: cancels your wind-ups, stances and constructs that cost ${fmt(a.profile.madra / 2)} or less · each madra of block takes 1.5 off its strength`
       : ro.construct
       ? `aimed at your ${ro.construct.name} (${fmt(ro.construct.hp)} HP): ${ro.take.damage} damage${a.hits > 1 ? ' per hit' : ''} · you can reinforce it with madra, but not dodge for it`
       : disrupt
       ? 'breaks your wind-ups and stances if it hits'
       : `${a.hits > 1 ? `${a.hits} hits of ` : ''}${a.profile.hitDamages ? a.profile.hitDamages.map(fmt).join(' + ') : fmt(a.profile.damage)} ${a.profile.dtype === 'spiritual' ? 'spiritual ' : ''}damage
-        ${a.profile.sharpness ? `· sharpness ${a.profile.sharpness}` : ''}${a.profile.pure ? ' · pure madra: blocks cost double' : ''}
+        ${a.profile.sharpness ? `· sharpness ${a.profile.sharpness}` : ''}
         · ${ro.take.damageText} after ${f.name}'s reduction`;
     el.innerHTML = `
       <div class="prompt-title theme-${f.theme}">${f.name} reacts <span class="muted">t=${fmt(game.time)}</span></div>
@@ -355,7 +370,7 @@ function renderPrompt() {
         <b>${att.name}'s ${a.profile.name}</b> is landing: ${what}${a.profile.toHit ? ` · +${a.profile.toHit} to hit` : ''}${a.profile.area ? ' · area attack, no roll' : ''}
         · your threshold is ${fmt(game.threshold(f))} (stances ${fmt(game.stanceThreshold(f))})
       </div>
-      ${canBlock && !disrupt ? `<label class="slider block-amount">Block per hit <input type="range" min="0" max="${ro.block.maxBase}" value="${ui.block}" data-block><b data-block-val>${ui.block}</b><span class="muted" data-block-dr>−${fmt(blockReduction(ui.block))} damage each</span></label>` : ''}
+      ${canBlock && !disrupt ? `<label class="slider block-amount">Block madra <input type="range" min="0" max="${ro.block.maxBase}" value="${ui.block}" data-block><b data-block-val>${ui.block}</b><span class="muted" data-block-dr>soaks ${fmt(blockReduction(ui.block))}${a.hits > 1 ? ' across the hits' : ''}</span></label>` : ''}
       <div class="cards">
         ${reactCard('take', 'Take it')}
         ${ro.construct || pulse ? '' : reactCard('dodge', 'Dodge')}
@@ -389,13 +404,13 @@ function reactPreview(choice) {
     return [
       `Strength ${fmt(o.pulse.strength)}: cancels anything that cost ${fmt(o.pulse.strength / 2)} or less`,
       names.length ? `<span class="reason">Breaks ${names.join(', ')}</span>` : 'Nothing of yours breaks',
-      o.madraCost ? `${fmt(o.madraCost)} madra (double: pure madra) · next turn ${fmt(o.delay)} later` : 'No cost',
+      o.madraCost ? `${fmt(o.madraCost)} madra · next turn ${fmt(o.delay)} later` : 'No cost',
     ].map((l) => `<div>${l}</div>`).join('');
   }
   const dodging = choice === 'dodge' || choice === 'dodgeBlock';
   const lines = [];
-  if (a.profile.area) lines.push(dodging ? `Area: no roll, damage −${pct(ro.dodge.reduction)}` : 'Area: no roll');
-  else if (dodging && a.hits > 1) lines.push(`${o.chances.map(pct).join(' / ')} to hit (dodge +${ro.dodge.bonuses.join(' / +')}: it tapers per hit)`);
+  const st = ro.dodge.sidestep;
+  if (a.profile.area) lines.push(dodging && st ? `Sidestep ${fmt(st.metres)} m: ${st.escapes ? '<b>out of it</b>' : 'still inside'}` : 'Area: no roll');
   else lines.push(`${pct(o.chance)} to hit${a.hits > 1 ? ' (each)' : ''}${dodging ? ` (+${ro.dodge.bonus} Defense)` : ''}`);
   if (a.profile.effect === 'disrupt') {
     lines.push('<span class="reason">breaks your wind-ups and stances</span> if it hits');
@@ -404,7 +419,7 @@ function reactPreview(choice) {
     lines.push(`${o.perHitText ? o.perHitText : `${a.hits > 1 ? `${a.hits} hits × ` : ''}${o.perHit}`}${o.track === 'spirit' ? ' spirit' : ''} damage${o.construct ? ` to ${o.construct.name}` : ''}${o.absorbed ? ` (barrier soaks ${fmt(o.absorbed)})` : ''}${flag}`);
   }
   const costs = [];
-  if (o.madraCost) costs.push(`${fmt(o.madraCost)} madra${a.hits > 1 ? ` (${ro.block.factor}× for ${a.hits} hits)` : ''}`);
+  if (o.madraCost) costs.push(`${fmt(o.madraCost)} madra`);
   if (o.delay) costs.push(`next turn ${fmt(o.delay)} later`);
   lines.push(costs.length ? costs.join(' · ') : 'No cost');
   return lines.map((l) => `<div>${l}</div>`).join('');
@@ -650,6 +665,12 @@ document.addEventListener('click', (e) => {
     render();
     return;
   }
+  const opp = e.target.closest('[data-opp]');
+  if (opp) {
+    game.opportunity(opp.dataset.opp);
+    render();
+    return;
+  }
   const draw = e.target.closest('[data-draw]');
   if (draw) {
     const i = Number(draw.dataset.draw);
@@ -691,7 +712,7 @@ document.addEventListener('input', (e) => {
   if (e.target.hasAttribute('data-block')) {
     ui.block = Number(e.target.value);
     document.querySelector('[data-block-val]').textContent = e.target.value;
-    document.querySelector('[data-block-dr]').textContent = `−${fmt(blockReduction(ui.block))} damage each`;
+    document.querySelector('[data-block-dr]').textContent = `soaks ${fmt(blockReduction(ui.block))}`;
     for (const c of REACTIONS) {
       const el = document.querySelector(`[data-react-preview="${c}"]`);
       if (el) el.innerHTML = reactPreview(c);

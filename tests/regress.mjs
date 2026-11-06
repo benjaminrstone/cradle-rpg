@@ -163,6 +163,11 @@ function playFight(defs, seed) {
       const b = blocks[Math.floor(rnd() * blocks.length)];
       game.react(c, b);
       step('react', { c, b });
+    } else if (p.kind === 'opportunity') {
+      step('opportunity', game.opportunityOptions());
+      const c = rnd() < 0.6 ? 'strike' : 'let';
+      game.opportunity(c);
+      step('opp', { c });
     } else break;
     step('after', { state: game.serialize(), upcoming: game.upcoming(), history: game.history });
     // Describe every wind-up, as the fighter panels do.

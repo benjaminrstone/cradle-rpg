@@ -113,7 +113,6 @@ def describe(s):
         a = r["attack"]
         out.append(
             f"Incoming: {r['attacker']}'s {a['name']}: {a['hits']} hit(s) of {a['damage']} {a.get('dtype', '')}"
-            f"{', pure madra (blocks cost double)' if a.get('pure') else ''}"
             f"{', area (no roll)' if a['area'] else ''}, sharpness {a['sharpness']}"
         )
         if r.get("pulse"):
@@ -123,23 +122,30 @@ def describe(s):
         if r.get("construct"):
             cn = r["construct"]
             out.append(f"  aimed at {cn['name']} ({cn['hp']} HP): no dodge; 'block N' reinforces it")
-        out.append(f"  take: {pct(r['take']['chance'])} to hit, {r['take']['damageEach']} damage each after reduction")
+        out.append(f"  take: {pct(r['take']['chance'])} to hit, {r['take']['damageEach']} damage after reduction (and any barrier)")
         d = r["dodge"]
         if d.get("available") is not False:
+            st = d.get("sidestep")
             out.append(
-            f"  dodge: area damage -{pct(d['reduction'])}, next turn +{d['delay']}" if a["area"]
-            else f"  dodge: {' / '.join(pct(c) for c in d.get('chances') or [d['chance']])} to hit per hit (+{' / +'.join(str(b) for b in d.get('bonuses') or [d['bonus']])} Defense, tapering), next turn +{d['delay']}"
-        )
+                f"  dodge: sidestep {st['metres']} m, {'gets you out of it' if st['escapes'] else 'still inside'}; next turn +{d['delay']}" if st
+                else f"  dodge: {pct(d['chance'])} to hit on every hit (+{d['bonus']} Defense), next turn +{d['delay']}"
+            )
         b = r["block"]
         out.append(
-            f"  block N: -1.5N damage per hit, costs N x {b['factor']} madra, N up to {b['maxBase']}, next turn +{b['delay']}"
+            f"  block N: costs N madra and soaks {b['soakPerMadra']}N damage in all, across every hit (N up to {b['maxMadra']}; {b['zeroAt']} soaks everything), next turn +{b['delay']}"
         )
-        out.append("  dodgeBlock N: both at once (the dodge's effect and time, plus the block)")
+        out.append("  dodgeBlock N: both at once (the dodge's effect and time, plus the block; a sidestep that gets you out saves the block)")
         if r.get("effect") == "disrupt":
             out.append("  (no damage: if it hits, it breaks your wind-ups and stances)")
         rd = r.get("redirect") or {}
         if rd.get("shown"):
             out.append(f"  redirect: throw it back for {rd['cost']} madra" + ("" if rd.get("available") else " (not enough madra)"))
+    if s.get("opportunity"):
+        op = s["opportunity"]
+        st = op["strike"]
+        out.append(f"{op['mover']} is walking out of Close range. Strike as they go? Lands at once: {pct(st['chance'])} to hit, {st['damage']} damage;"
+                   f" your next turn comes {st['delay']} later{' (breaks their wind-ups)' if st['interrupts'] else ''}.")
+        out.append("  strike / let")
     return "\n".join(out)
 
 

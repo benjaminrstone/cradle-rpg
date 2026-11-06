@@ -93,7 +93,6 @@ function render() {
           <div class="p-knobs">
             <label class="p-knob">Efficiency × <input type="number" data-p-path="efficiencyMult" min="0.8" max="1.5" step="0.05" value="${draft.efficiencyMult}"></label>
             <label class="p-knob">Sharpness <input type="number" data-p-path="sharpness" min="0" max="5" step="1" value="${draft.sharpness}"></label>
-            <label class="p-knob p-bool"><input type="checkbox" data-p-path="pureMadra" ${draft.pureMadra ? 'checked' : ''}> Pure madra (blocks against it cost double; double damage to madra constructs)</label>
             <label class="p-knob p-bool"><input type="checkbox" data-p-path="selfBurn" ${draft.selfBurn ? 'checked' : ''}> Burns its user (1 health per 5 madra, 1 spirit per 10)</label>
           </div>
           <label class="p-wide">New effect <textarea data-p-path="element" rows="2" placeholder="Describe a madra property the options above don't cover; ask Claude to implement it.">${esc(draft.element)}</textarea></label>

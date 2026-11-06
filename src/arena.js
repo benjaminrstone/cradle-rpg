@@ -14,17 +14,15 @@ export const ARENA = {
   ],
 };
 
-// Close is up to 2 m, Mid up to 14 m, Far beyond. From the 8 m start, Close (1.5 m) and Far
-// (past 14 m) are both about 6 m away: 3 ticks at 2 m per tick.
-export const BANDS = [2, 14];
-// How far out each band reaches, Far included (as far as an area can grow).
-export const BAND_EDGES = [2, 14, 20];
-// The largest an aimed area (released at a target, or set at a point) can grow.
-export const AIMED_AREA_MAX = 14;
+// Range words for distances: Close up to 2 m, Mid up to 10 m, Far beyond. Attacks reach and
+// lose accuracy by the metre (rules.js); the words are shorthand.
+export const BANDS = [2, 10];
+// The largest an area can grow.
+export const AREA_MAX = 14;
 // A fighter's size, for keeping clear of walls and obstacles.
 export const RADIUS = 0.5;
-// Crown stars hang this high over their owner: always Far, and over every obstacle.
-export const STAR_HEIGHT = 16;
+// Crown stars hang this high over their owner: out of reach of anything short-ranged, and over every obstacle.
+export const STAR_HEIGHT = 14;
 // Launch: the farthest a ring can fling you, enough to go from the start to Close or Far.
 export const LAUNCH_REACH = 7;
 // Where "toward" moves stop: this far from the opponent, well inside Close.
