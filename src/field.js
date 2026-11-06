@@ -3,12 +3,14 @@
 // Tokens persist between updates (matched by key), so fighters glide to new positions along
 // the route they walked, and wind-ups fade in as they build instead of the map redrawing.
 // On your turn, hovering the field shows the route a move would take, and a click picks it.
+// Area attacks show as circles: ones winding up, the hovered card's, and (while aiming an area set
+// at a point) the one under the mouse.
 import { fmt } from './engine.js';
 import { RANGES, moveTime } from './rules.js';
 import * as A from './arena.js';
 
 const NS = 'http://www.w3.org/2000/svg';
-const view = { game: null, picking: null, onPick: null, hoverAt: null };
+const view = { game: null, picking: null, onPick: null, hoverAt: null, aiming: null };
 // Per fighter: where the token was last sent, at what game time, and the moves seen so far.
 const trail = new Map();
 const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -124,7 +126,7 @@ function build(root, game) {
   root.innerHTML = `<div class="field-head"><span class="section-label">Field</span><span class="field-info"></span></div>
     <div class="arena" style="aspect-ratio:${W} / ${H}"><div class="arena-tip" hidden></div></div>`;
   const arena = root.querySelector('.arena');
-  arena.dataset.layout = game.arena.name;
+  arena.dataset.layout = `${game.arena.name}:areas`;
   const s = svg('svg', { class: 'arena-svg', viewBox: `0 0 ${W} ${H}` });
   const grid = svg('g', { class: 'grid' });
   for (let x = 2; x < W; x += 2) grid.appendChild(svg('line', { x1: x, y1: 0, x2: x, y2: H }));
@@ -135,7 +137,7 @@ function build(root, game) {
     o.appendChild(svg('title')).textContent = r.name;
     s.appendChild(o);
   }
-  for (const layer of ['rings', 'sight', 'routes', 'plan', 'hover']) s.appendChild(svg('g', { class: layer }));
+  for (const layer of ['areas', 'rings', 'sight', 'routes', 'plan', 'hover']) s.appendChild(svg('g', { class: layer }));
   arena.prepend(s);
   arena.appendChild(div('sight-label'));
 
@@ -171,10 +173,24 @@ function drawHover(arena) {
   const game = view.game;
   if (view.picking == null || !view.hoverAt || !game) return;
   const f = game.fighters[view.picking];
-  const plan = game.planMove(f, view.hoverAt);
   place(tip, game, view.hoverAt);
   tip.classList.toggle('flip', view.hoverAt.x > game.arena.width * 0.6);
   tip.hidden = false;
+  if (view.aiming) {
+    // Aiming an area: the circle it would make here, and whether the opponent is inside it now.
+    const prof = game.attackProfile(f, view.aiming.key, view.aiming.amount);
+    const spot = game.planArea(f, prof, view.hoverAt);
+    const o = game.opponent(f);
+    const g = svg('g', { class: `theme-${f.theme}` });
+    g.appendChild(svg('circle', { class: `area aim${spot.error ? ' bad' : ''}`, cx: view.hoverAt.x, cy: view.hoverAt.y, r: prof.radius }));
+    layer.appendChild(g);
+    tip.classList.toggle('bad', !!spot.error);
+    if (spot.error) { tip.textContent = spot.error; return; }
+    const k = game.areaCatch(spot.centre, prof.radius, game.pos(o));
+    tip.textContent = `${fmt(spot.dist)} m away · ${fmt(prof.radius)} m radius · ${o.name} ${k.inside ? 'inside' : k.outside ? 'outside' : `behind a ${k.blockedBy.name}`} now`;
+    return;
+  }
+  const plan = game.planMove(f, view.hoverAt);
   if (plan.error) {
     tip.textContent = plan.error;
     tip.classList.add('bad');
@@ -199,9 +215,10 @@ export function renderField(game, opts = {}) {
   const root = document.getElementById('field');
   if (!root) return;
   view.game = game;
+  view.aiming = opts.aiming || null;
   view.picking = opts.picking ?? null;
   view.onPick = opts.onPick || null;
-  if (root.querySelector('.arena')?.dataset.layout !== game.arena.name) build(root, game);
+  if (root.querySelector('.arena')?.dataset.layout !== `${game.arena.name}:areas`) build(root, game);
   const arena = root.querySelector('.arena');
   const pos = game.fighters.map((f) => game.pos(f));
   const sight = game.sight(pos[0], pos[1]);
@@ -232,6 +249,22 @@ export function renderField(game, opts = {}) {
     g.appendChild(svg('title')).textContent = `${f.name} arrives t=${fmt(m.end)}`;
     return g;
   }));
+
+  // Area attacks winding up (where they'll be centred when they land), and the hovered card's.
+  const areas = game.events.filter((e) => e.action.kind === 'attack' && e.action.profile && e.action.profile.radius != null).map((e) => {
+    const f = game.fighters[e.actor];
+    const c = game.areaCentre(f, e.action.profile, e.time);
+    const g = svg('g', { class: `theme-${f.theme}` });
+    g.appendChild(svg('circle', { class: 'area pending', cx: c.x, cy: c.y, r: e.action.profile.radius }));
+    g.appendChild(svg('title')).textContent = `${f.name}'s ${e.action.profile.name}: ${fmt(e.action.profile.radius)} m radius, lands t=${fmt(e.time)}`;
+    return g;
+  });
+  if (opts.area) {
+    const g = svg('g', { class: `theme-${game.fighters[opts.area.who].theme}` });
+    g.appendChild(svg('circle', { class: 'area ghost', cx: opts.area.centre.x, cy: opts.area.centre.y, r: opts.area.radius }));
+    areas.push(g);
+  }
+  arena.querySelector('.areas').replaceChildren(...areas);
 
   // A previewed route (hovering a move card, or the destination already chosen).
   const plan = opts.plan;

@@ -48,7 +48,9 @@ def fighter_line(f):
         lines.append(f"    construct {c['id']}: {c['name']} ({c['hp']} HP{stars})")
     for p in f.get("windups", []):
         boost = f", boosted +{p['boost']}" if p.get("boost") else ""
-        lines.append(f"    winding up: {p['label']} ({p['madra']} madra{boost}), lands t={p['lands']}")
+        area = p.get("area")
+        where = f", area {area['radius']} m around ({area['centre']['x']}, {area['centre']['y']}) [{area['aim']}]" if area else ""
+        lines.append(f"    winding up: {p['label']} ({p['madra']} madra{boost}{where}), lands t={p['lands']}")
     if f.get("at"):
         lines.append(f"    at ({f['at']['x']}, {f['at']['y']})")
     if f["moving"]:
@@ -92,14 +94,17 @@ def describe(s):
                 slider = f" [{sl['label']} {sl['min']}-{sl['max']}, preview at {sl['previewAt']}]"
             status = f"  (unavailable: {o['reason']})" if not o["enabled"] else f"  (warning: {o['warning']})" if o.get("warning") else ""
             if o.get("point") and not o["enabled"]:
-                status = "  (give it a destination)"
+                status = "  (give it a centre)" if o["point"].get("area") else "  (give it a destination)"
             out.append(f"  {o['key']}: {o['label']}{slider}{status}")
             if o.get("targets"):
                 out.append("      can target: " + ", ".join(f"@{t['id']} {t['label']}" for t in o["targets"]))
             for line in o["preview"]:
                 out.append(f"      {line}")
             if o.get("point"):
-                out.append(f"      destination: @x:y (e.g. {o['key']} @12:8), or @toward / @away")
+                if o["point"].get("area"):
+                    out.append(f"      area centre: @x:y (e.g. {o['key']} @20:12), or @them (the opponent's spot now)")
+                else:
+                    out.append(f"      destination: @x:y (e.g. {o['key']} @12:8), or @toward / @away")
                 for way, w in (o["point"].get("ways") or {}).items():
                     status = "" if w["enabled"] else f" (unavailable: {w['reason']})"
                     out.append(f"      @{way}{status}: " + " / ".join(w["preview"][:2]))

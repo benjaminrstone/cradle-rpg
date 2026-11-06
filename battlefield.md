@@ -31,12 +31,20 @@ The start sits about 6 m from both Close and Far, so either takes about 3 ticks 
 ## Obstacles
 
 - **They block movement.** Routes go around them.
-- **They block line of sight.** An attack lands only if the line from the attacker to the target is clear when it lands; otherwise it's wasted. This covers strikes, Striker shots, Seal, and area attacks: an obstacle shelters you from an area attack too.
+- **They block line of sight.** An attack lands only if the line from the attacker to the target is clear when it lands; otherwise it's wasted. This covers strikes, Striker shots and Seal. Area attacks check the line from their centre instead, so an obstacle shelters you from them too (below).
 - **Overhead is clear.** Crown stars come down from above, so obstacles don't stop them, and attacks aimed up at a star clear every obstacle.
 
 ## Area attacks
 
-An area attack is centred on the attacker when it lands. It hits everything within its bands that has a clear line from the attacker: the opponent and their constructs.
+An area attack is a circle. It hits everything inside it with a clear line from its centre: the opponent and their constructs, never the attacker. Its radius grows with the madra put in, at a rate set by the technique: Endless Sword and Void Dragon's Dance are 4 m + 0.5 m per madra.
+
+Where the centre goes depends on the technique's aim:
+
+- **Around you:** centred on the attacker, wherever they are when it lands. The radius stops at the edge of the technique's farthest band (14 m for one that reaches Mid). Endless Sword and Void Dragon's Dance work this way.
+- **Released at a target:** you pick the opponent or one of their constructs, and it's released at wherever that target is when it lands. The target must then be within the technique's bands and in sight, or it's wasted.
+- **Set at a point:** you pick a spot within the technique's bands that you can see. It forms there however anyone moves afterwards, so the opponent can get out before it lands.
+
+Aimed areas grow up to 14 m. Madra Pulse is a burst around you that reaches Close range. The map shows each area as a circle while it winds up.
 
 ## Constructs
 

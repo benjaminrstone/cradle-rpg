@@ -257,6 +257,115 @@ export class Game {
     return { from, path, dest, length };
   }
 
+  // ---------- area attacks ----------
+  // An area attack is a circle. Its centre depends on the technique's aim:
+  //   self:    on the attacker, wherever they are when it lands (the default);
+  //   release: built up, then released at a target: on wherever that target is when it lands;
+  //   set:     built up at a spot picked when it starts, within the technique's bands, in sight.
+  // Its radius grows with madra, up to the edge of its farthest band (centred on you) or
+  // AIMED_AREA_MAX (aimed). It hits everything inside with a clear line from the centre.
+  areaRadius(t, madra) {
+    const cap = (t.aim || 'self') === 'self' ? A.BAND_EDGES[Math.max(...t.ranges)] : A.AIMED_AREA_MAX;
+    return Math.min(cap, (t.radius ?? 4) + (t.radiusPerMadra ?? 0.5) * madra);
+  }
+
+  // Fill in where an area attack is aimed: the spot for `set` ("x:y", or "them" for the
+  // opponent's spot now), the target for `release` (a construct id, or '' for the opponent).
+  // Returns an error message, or null.
+  aimArea(f, prof, target) {
+    if (prof.aim === 'release') {
+      prof.aimAt = target || '';
+      prof.target = '';
+      return null;
+    }
+    if (prof.aim !== 'set') return null;
+    prof.target = '';
+    const plan = this.planArea(f, prof, target);
+    if (plan.error) return plan.error;
+    prof.centre = plan.centre;
+    return null;
+  }
+
+  planArea(f, prof, to) {
+    const o = this.opponent(f);
+    const raw = to === 'them' ? this.pos(o) : typeof to === 'string' ? A.parsePoint(to) : to;
+    if (!raw) return { error: 'Choose where: click the field' };
+    const centre = { x: Math.round(raw.x * 10) / 10, y: Math.round(raw.y * 10) / 10 };
+    if (centre.x < 0 || centre.y < 0 || centre.x > this.arena.width || centre.y > this.arena.height) return { error: 'Outside the arena', centre };
+    if (this.arena.obstacles.some((r) => centre.x > r.x && centre.x < r.x + r.w && centre.y > r.y && centre.y < r.y + r.h)) return { error: 'Inside an obstacle', centre };
+    const s = this.sight(this.pos(f), centre);
+    if (!prof.ranges.includes(s.band)) return { error: `Too far: it reaches ${prof.ranges.map((r) => R.RANGES[r]).join('/')} (that's ${fmt(s.dist)} m, ${R.RANGES[s.band]})`, centre };
+    if (s.blockedBy) return { error: `A ${s.blockedBy.name} is in the way`, centre };
+    return { centre, dist: s.dist };
+  }
+
+  // Where an area attack's centre is at time t.
+  areaCentre(f, prof, t = this.time) {
+    if (prof.aim === 'set' && prof.centre) return prof.centre;
+    if (prof.aim === 'release') {
+      const o = this.opponent(f);
+      const c = prof.aimAt ? o.constructs.find((x) => x.id === prof.aimAt) : null;
+      if (c) return this.constructPos(o, c, t);
+      return this.pos(o, t);
+    }
+    return this.pos(f, t);
+  }
+
+  // Is a point inside the circle, with a clear line from its centre?
+  areaCatch(centre, radius, p) {
+    const dist = A.dist(centre, p);
+    const blockedBy = A.blocker(this.arena, centre, p);
+    return { inside: dist <= radius + EPS && !blockedBy, dist, blockedBy, outside: dist > radius + EPS };
+  }
+
+  // Would an area attack landing at time t catch the opponent? For a release, the target must
+  // also be within the technique's bands and in sight when it lands.
+  areaLands(f, prof, t) {
+    const o = this.opponent(f);
+    if (prof.aim === 'release') {
+      const c = prof.aimAt ? o.constructs.find((x) => x.id === prof.aimAt) : null;
+      if (prof.aimAt && !c) return { ok: false, out: true, why: 'its target is gone' };
+      const s = this.sight(this.pos(f, t), c ? this.constructPos(o, c, t) : this.pos(o, t));
+      if (!prof.ranges.includes(s.band)) return { ok: false, out: true, why: `${c ? c.name : o.name} is out of range (${R.RANGES[s.band]})` };
+      if (s.blockedBy) return { ok: false, out: true, why: `a ${s.blockedBy.name} is in the way` };
+    }
+    const centre = this.areaCentre(f, prof, t);
+    const k = this.areaCatch(centre, prof.radius, this.pos(o, t));
+    if (k.inside) return { ok: true, centre, dist: k.dist };
+    return { ok: false, centre, dist: k.dist, why: k.outside ? `${o.name} is outside it (${fmt(k.dist)} m from the centre)` : `${o.name} is sheltered by a ${k.blockedBy.name}` };
+  }
+
+  areaGate(f, prof, landAt) {
+    const o = this.opponent(f);
+    const l = this.areaLands(f, prof, landAt);
+    const later = landAt > this.time + EPS;
+    const near = later && !(prof.aim === 'release' && !prof.aimAt);
+    if (l.ok) return { warning: null, note: near ? `${o.name} will be ${fmt(l.dist)} m from the centre when it lands (t=${fmt(landAt)})` : null };
+    return { warning: `${later ? 'When it lands, ' : ''}${l.why}: ${l.out ? 'wasted' : 'it only hits what is inside'}, unless someone moves`, note: null };
+  }
+
+  areaLine(f, prof) {
+    const o = this.opponent(f);
+    const r = `${fmt(prof.radius)} m`;
+    if (prof.aim === 'set') return `Forms at (${fmt(prof.centre.x)}, ${fmt(prof.centre.y)}): everything within ${r} of it, wherever anyone moves`;
+    if (prof.aim === 'release') {
+      const c = prof.aimAt ? o.constructs.find((x) => x.id === prof.aimAt) : null;
+      return `Released at ${c ? `${o.name}'s ${c.name}` : o.name} when it lands (${prof.ranges.map((x) => R.RANGES[x]).join('/')}): everything within ${r} of ${c ? 'it' : 'them'}`;
+    }
+    return `Hits everything within ${r} of you when it lands, in sight`;
+  }
+
+  // An area attack also hits the defender's constructs inside it (barriers only soak).
+  areaConstructHits(att, def, prof, hits) {
+    const from = prof.centre || this.pos(att);
+    for (const c of [...def.constructs]) {
+      if (c.kind === 'barrier') continue;
+      const p = this.constructPos(def, c);
+      const ok = prof.radius != null ? this.areaCatch(from, prof.radius, p).inside : this.reaches(prof, from, p);
+      if (ok) this.damageConstruct(def, c, this.constructDamage(prof) * hits, prof.name);
+    }
+  }
+
   // ---------- log ----------
   addLog(text, cls = '', who = null) {
     this.log.push({ time: this.time, text, cls, who });
@@ -312,6 +421,7 @@ export class Game {
       ranges: t.ranges,
       bestRange: t.bestRange ?? t.ranges[0],
       area: !!t.area,
+      ...(t.area ? { aim: t.aim || 'self', radius: this.areaRadius(t, madra) } : {}),
       pure: !!p.pureMadra && !t.physical && t.dtype !== 'physical',
       hits: 1,
       bladeHits: !!t.bladeHits,
@@ -490,7 +600,8 @@ export class Game {
         const top = Math.floor(max / step) * step;
         opt.slider = { label: 'Madra', min, max: top, step, initial: Math.max(min, Math.min(10, top)) };
       }
-      if (t.kind === 'attack' && !t.area) opt = withTargets(opt, t.ranges);
+      if (t.kind === 'attack' && (!t.area || t.aim === 'release')) opt = withTargets(opt, t.ranges);
+      if (t.kind === 'attack' && t.area && t.aim === 'set') opt.point = { area: true };
       opts.push(opt);
     }
     return opts;
@@ -646,6 +757,18 @@ export class Game {
     }
 
     const prof = this.attackProfile(f, key, madra);
+    if (prof.area) {
+      const err = this.aimArea(f, prof, target);
+      if (err) return { enabled: false, reason: err, lines: [timing, `Radius ${fmt(prof.radius)} m; pick its centre on the field`] };
+      const gate = this.areaGate(f, prof, this.time + w);
+      const ac = prof.aimAt ? tc : null;
+      const lines = [timing, this.areaLine(f, prof), ac ? `${this.constructDamage(prof)} damage to ${ac.name}` : attackLines(prof, this.hitsAgainst(f, o, prof))];
+      if (gate.note) lines.push(gate.note);
+      if (prof.sharpness) lines.push(`Sharpness ${prof.sharpness}`);
+      if (t.boostPerMadra) lines.push(`+${t.boostPerMadra} damage per Black Flame madra you spend while it winds up`);
+      if (this.path(f).selfBurn) lines.push(`Burns you for ${fmt(madra / 5)} health and ${fmt(madra / 10)} spirit`);
+      return { enabled: true, reason: '', warning: gate.warning, lines };
+    }
     const rangeText = `Out of range (${prof.ranges.map((r) => R.RANGES[r]).join('/')})`;
     const gate = tc ? this.constructGate(f, prof.ranges, tc, rangeText) : this.rangeGate(f, prof.ranges, this.time + w, rangeText);
     const hits = tc ? 1 : this.hitsAgainst(f, o, prof);
@@ -834,6 +957,19 @@ export class Game {
     }
     const prof = this.attackProfile(f, key, madra);
     q(this.time + w, `${t.name} lands`, 'attack');
+    if (prof.area) {
+      this.aimArea(f, prof, target);
+      const l = this.areaLands(f, prof, this.time + w);
+      if (l.centre) out.area = { who: f.index, centre: l.centre, radius: prof.radius };
+      if (prof.aimAt) out.notes[o.index] = 'aimed at a construct';
+      else if (l.ok) {
+        const hits = this.hitsAgainst(f, o, prof);
+        const res = this.hitResult(f, o, prof);
+        add(o.index, res.track, -res.dmg * hits);
+        out.notes[o.index] = `${hits > 1 ? `${hits} hits, ` : ''}no roll`;
+      } else out.notes[o.index] = `missed: ${l.why}`;
+      return out;
+    }
     hitDelta(prof, this.hitsAgainst(f, o, prof));
     return out;
   }
@@ -969,7 +1105,8 @@ export class Game {
     const f = this.current();
     if (!f || this.prompt.kind !== 'turn') return;
     const o = this.opponent(f);
-    const pointed = key === 'move' || (this.tech(f, key) || {}).kind === 'launch';
+    const tk = this.tech(f, key) || {};
+    const pointed = key === 'move' || tk.kind === 'launch' || (tk.area && tk.aim === 'set');
     if (target && !pointed && !o.constructs.some((c) => c.id === target)) target = '';
     const pv = this.preview(f, key, amount, target);
     if (!pv.enabled) return;
@@ -993,6 +1130,7 @@ export class Game {
     }
 
     const aimed = target && !pointed ? ` at ${o.name}'s ${o.constructs.find((c) => c.id === target).name}` : '';
+    let aimedText = aimed;
     if (key === 'strike') {
       const prof = { ...this.attackProfile(f, 'strike'), target };
       const w = R.physTime(R.TIMING.strikeWindup, spd);
@@ -1060,12 +1198,18 @@ export class Game {
             this.startForge(f, t, w, madra);
           } else {
             const prof = { ...this.attackProfile(f, key, madra), target };
+            if (prof.area) {
+              this.aimArea(f, prof, target);
+              if (prof.aim === 'set') aimedText = ` at (${fmt(prof.centre.x)}, ${fmt(prof.centre.y)}), radius ${fmt(prof.radius)} m`;
+              else if (prof.aim === 'release') aimedText = `${aimedText || ` at ${o.name}`}, radius ${fmt(prof.radius)} m`;
+              else aimedText = `, reaching ${fmt(prof.radius)} m around them`;
+            }
             this.startWindup(f, w, { kind: 'attack', profile: prof }, madra * (t.costMult || 1), { boostPerMadra: t.boostPerMadra || 0 });
           }
           f.nextTurn = this.time + (t.ruler || t.kind === 'construct' ? R.TIMING.actWhileBuilding : w);
           this.addLog(t.kind === 'construct'
             ? `${f.name} begins Forging ${t.name} with ${madra} madra (complete at t=${fmt(this.time + w)}).`
-            : `${f.name} winds up ${t.name} with ${madra} madra${aimed} (lands t=${fmt(this.time + w)}).`, '', f.index);
+            : `${f.name} winds up ${t.name} with ${madra} madra${aimedText} (lands t=${fmt(this.time + w)}).`, '', f.index);
         }
       }
     }
@@ -1223,12 +1367,7 @@ export class Game {
       this.applyHit(def, res);
     }
     // Area attacks also hit the defender's constructs in range (barriers only soak).
-    if (prof.area && prof.effect !== 'disrupt') {
-      for (const c of [...def.constructs]) {
-        if (c.kind === 'barrier' || !this.reaches(prof, this.pos(att), this.constructPos(def, c))) continue;
-        this.damageConstruct(def, c, this.constructDamage(prof) * hits, prof.name);
-      }
-    }
+    if (prof.area && prof.effect !== 'disrupt') this.areaConstructHits(att, def, prof, hits);
     this.checkEnd();
   }
 
@@ -1293,8 +1432,9 @@ export class Game {
     if (a.kind === 'move') return '';
     const prof = a.profile;
     if (!prof) return '';
-    const landsIn = prof.target || prof.overhead ? true : this.reaches(prof, this.pos(f, e.time), this.pos(o, e.time));
-    const out = landsIn ? '' : ' · out of range or blocked when it lands';
+    const area = prof.radius != null ? this.areaLands(f, prof, e.time) : null;
+    const landsIn = area ? area.ok : prof.target || prof.overhead ? true : this.reaches(prof, this.pos(f, e.time), this.pos(o, e.time));
+    const out = landsIn ? '' : area ? ` · when it lands: ${area.why}` : ' · out of range or blocked when it lands';
     if (a.kind === 'pulse' || prof.effect === 'pulse') {
       const names = this.pulseTargets(o, prof.madra, prof.ranges).map((x) => x.name);
       return `Cancels ${names.length ? names.join(', ') : `nothing of ${o.name}'s right now`} unless ${o.name} blocks${out}`;
@@ -1445,6 +1585,10 @@ export class Game {
     }
 
     const profile0 = a.profile;
+    if (profile0.radius != null) {
+      this.landArea(f, o, profile0, boost);
+      return;
+    }
     if (!profile0.target && !profile0.overhead) {
       const s = this.sight(this.pos(f), this.pos(o));
       if (!profile0.ranges.includes(s.band)) {
@@ -1496,6 +1640,31 @@ export class Game {
     if (boost > 0) {
       profile = { ...profile, damage: profile.damage + boost };
       this.addLog(`${f.name}'s ${profile.name} is boosted by ${fmt(boost)} from Black Flame spent while it built up.`, '', f.index);
+    }
+    const hits = this.hitsAgainst(f, o, profile);
+    this.prompt = { kind: 'reaction', fighter: o.index, attack: { attacker: f.index, profile, hits } };
+    this.decision++;
+  }
+
+  // An area attack lands: find its centre, then hit everything inside with a clear line from it.
+  // The opponent gets to react if they're inside; constructs inside are hit either way.
+  landArea(f, o, profile0, boost) {
+    const l = this.areaLands(f, profile0, this.time);
+    if (l.out || !l.centre) {
+      this.addLog(`${f.name}'s ${profile0.name} is wasted: ${l.why}.`, 'miss', f.index);
+      return;
+    }
+    let profile = { ...profile0, centre: l.centre };
+    if (boost > 0) {
+      profile = { ...profile, damage: profile.damage + boost };
+      this.addLog(`${f.name}'s ${profile.name} is boosted by ${fmt(boost)} from Black Flame spent while it built up.`, '', f.index);
+    }
+    const where = profile.aim === 'self' ? '' : ` at (${fmt(l.centre.x)}, ${fmt(l.centre.y)})`;
+    if (!l.ok) {
+      this.addLog(`${f.name}'s ${profile.name} lands${where}, but ${l.why}.`, 'miss', f.index);
+      this.areaConstructHits(f, o, profile, 1);
+      this.checkEnd();
+      return;
     }
     const hits = this.hitsAgainst(f, o, profile);
     this.prompt = { kind: 'reaction', fighter: o.index, attack: { attacker: f.index, profile, hits } };

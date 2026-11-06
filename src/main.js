@@ -214,10 +214,15 @@ function optionControls(f, o, buttonLabel) {
 }
 
 // Moves and Launch: where to. Click the field, or head straight toward or away from the opponent.
+// Areas set at a point: where the centre goes. Click the field, or put it on the opponent.
 function pointPicker(f, o) {
   const cur = ui.target[o.key] || '';
   const p = parsePoint(cur);
   const them = game.opponent(f).name;
+  if (o.point.area) {
+    const at = p ? `(${fmt(p.x)}, ${fmt(p.y)})` : cur === 'them' ? them : 'click the field, or';
+    return `<div class="point-pick">At <b>${at}</b> <button class="ghost${cur === 'them' ? ' on' : ''}" data-point="${o.key}" data-way="them">On ${them}</button></div>`;
+  }
   const shown = p ? `(${fmt(p.x)}, ${fmt(p.y)})` : cur === 'toward' ? `toward ${them}` : cur === 'away' ? `away from ${them}` : 'click the field, or';
   const way = (w, label) => `<button class="ghost${cur === w ? ' on' : ''}" data-point="${o.key}" data-way="${w}">${label}</button>`;
   return `<div class="point-pick">To <b>${shown}</b> ${way('toward', `Toward ${them}`)}${way('away', 'Away')}</div>`;
@@ -232,7 +237,7 @@ function pickPoint(pt) {
   renderGhost();
 }
 
-const isPointTarget = (v) => v === 'toward' || v === 'away' || !!parsePoint(v);
+const isPointTarget = (v) => v === 'toward' || v === 'away' || v === 'them' || !!parsePoint(v);
 
 // What the field shows: on a person's turn, they can pick a destination; the route ghost is the
 // hovered card's, or else the move already chosen.
@@ -245,7 +250,13 @@ function fieldOpts(ghost) {
     const mv = game.planMove(f, ui.target.move);
     if (!mv.error) plan = { who: f.index, from: mv.from, path: mv.path };
   }
-  return { picking: human ? p.fighter : null, plan, onPick: pickPoint };
+  // Clicking the field aims an area set at a point when that card was the last one touched.
+  const aimKey = human && ui.pointCard && game.turnOptions(game.current()).some((o) => o.key === ui.pointCard && o.point && o.point.area) ? ui.pointCard : null;
+  return {
+    picking: human ? p.fighter : null, plan, onPick: pickPoint,
+    area: ghost && ghost.area ? ghost.area : null,
+    aiming: aimKey ? { key: aimKey, amount: ui.amount[aimKey] || 0 } : null,
+  };
 }
 
 function optionCard(f, o) {
@@ -627,6 +638,7 @@ document.addEventListener('click', (e) => {
   const point = e.target.closest('[data-point]');
   if (point) {
     ui.target[point.dataset.point] = point.dataset.way;
+    ui.pointCard = point.dataset.point;
     renderPrompt();
     renderGhost();
     return;
@@ -716,6 +728,12 @@ document.addEventListener('toggle', (e) => {
 
 document.addEventListener('mouseover', (e) => {
   const card = e.target.closest('[data-card], [data-react-card]');
+  // Remember which card with a field pick (move, Launch, an area set at a point) was touched last,
+  // so the field shows that kind of pick.
+  if (card && card.dataset.card && card.querySelector('[data-point]') && ui.pointCard !== card.dataset.card) {
+    ui.pointCard = card.dataset.card;
+    renderGhost();
+  }
   const next = !card || card.classList.contains('disabled') ? null
     : card.dataset.card ? { key: card.dataset.card } : { react: card.dataset.reactCard };
   if (JSON.stringify(next) !== JSON.stringify(ui.hover)) {

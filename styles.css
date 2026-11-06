@@ -317,6 +317,11 @@ details[data-stance] .stance-desc { color: var(--muted); margin: 4px 0 2px 14px;
 .arena-svg .hover-route { opacity: 0.85; }
 .arena-svg .spot { fill: none; stroke: var(--accent); stroke-width: 0.08; }
 .arena-svg .spot.bad { stroke: var(--health); }
+.arena-svg .area { fill: var(--accent); fill-opacity: 0.1; stroke: var(--accent); stroke-width: 0.08; }
+.arena-svg .area.pending { fill-opacity: 0.14; stroke-dasharray: 0.5 0.3; }
+.arena-svg .area.ghost { fill-opacity: 0.08; stroke-dasharray: 0.25 0.25; opacity: 0.8; }
+.arena-svg .area.aim { fill-opacity: 0.12; }
+.arena-svg .area.bad { fill: var(--health); stroke: var(--health); fill-opacity: 0.08; }
 .sight-label { position: absolute; transform: translate(-50%, -50%); font-size: 10px; color: var(--muted); background: var(--panel-2); padding: 0 3px; border-radius: 3px; pointer-events: none; transition: left 0.6s ease, top 0.6s ease; }
 .arena-tip { position: absolute; transform: translate(12px, -130%); font-size: 11px; white-space: nowrap; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; pointer-events: none; z-index: 3; }
 .arena-tip.flip { transform: translate(calc(-100% - 12px), -130%); }

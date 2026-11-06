@@ -179,7 +179,11 @@ function snapshot(game) {
     constructs: f.constructs.map((c) => ({ id: c.id, name: c.name, hp: r1(c.hp), stars: c.stars ?? null })),
     stats: f.stats,
     stances: game.activeStances(f).map((d) => ({ name: d.name, buildUp: game.buildUp(f, d), nextBuildUp: d.buildUp ? r1(game.nextBuildUp(f, d)) : null, upkeep: r1(game.upkeepRate(f, d)) })),
-    windups: f.windups.map((w) => ({ label: w.label, madra: w.madra, lands: r1(w.end), boost: r1(w.boost || 0) })),
+    windups: f.windups.map((w) => {
+      const prof = game.windupProfile(w);
+      const area = prof && prof.radius != null ? { centre: pt(game.areaCentre(f, prof, w.end)), radius: r1(prof.radius), aim: prof.aim } : null;
+      return { label: w.label, madra: w.madra, lands: r1(w.end), boost: r1(w.boost || 0), area };
+    }),
     at: pt(game.pos(f)),
     moving: f.moving && { to: pt(f.moving.path[f.moving.path.length - 1]), arrives: r1(f.moving.end) },
   }));
@@ -191,7 +195,8 @@ function snapshot(game) {
       const amount = o.slider ? o.slider.initial : 0;
       const pv = game.preview(cur, o.key, amount);
       // Moves need a destination: show where heading straight toward or away would take you.
-      const ways = o.point ? Object.fromEntries(['toward', 'away'].map((w) => {
+      // Areas set at a point need a centre: show putting it on the opponent.
+      const ways = o.point ? Object.fromEntries((o.point.area ? ['them'] : ['toward', 'away']).map((w) => {
         const wp = game.preview(cur, o.key, amount, w);
         return [w, { enabled: wp.enabled, reason: wp.reason, preview: wp.lines.filter(Boolean) }];
       })) : null;
@@ -204,7 +209,7 @@ function snapshot(game) {
         reason: pv.reason,
         warning: pv.warning || null,
         preview: pv.lines.filter(Boolean),
-        point: o.point ? { reach: o.point.reach, ways } : null,
+        point: o.point ? { reach: o.point.reach, area: !!o.point.area, ways } : null,
       };
     });
   }

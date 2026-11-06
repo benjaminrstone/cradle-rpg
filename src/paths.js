@@ -15,6 +15,19 @@ const DTYPE = pick('dtype', 'Damage type', [['technique', 'Technique'], ['spirit
 const RANGE_OPTS = [[0, 'Close'], [1, 'Mid'], [2, 'Far']];
 const MIN_R = (def = 0) => pick('minRange', 'Closest range', RANGE_OPTS, def);
 const MAX_R = (def = 1) => pick('maxRange', 'Farthest range', RANGE_OPTS, def);
+// Area attacks: where the circle goes, and how big it is.
+const AREA_KNOBS = [
+  pick('aim', 'Aim', [['self', 'Around you'], ['release', 'Released at a target'], ['set', 'Set at a point']], 'self'),
+  num('radius', 'Radius (m)', 1, 8, 0.5, 4),
+  num('radiusPerMadra', 'Radius per madra (m)', 0, 1, 0.05, 0.5),
+];
+const areaFields = (k) => ({ aim: k.aim !== 'self' ? k.aim : undefined, radius: k.radius, radiusPerMadra: k.radiusPerMadra });
+const areaText = (k) => {
+  const size = `${k.radius} m${k.radiusPerMadra ? ` + ${k.radiusPerMadra} m per madra` : ''}`;
+  if (k.aim === 'release') return `released at a target ${span(k.minRange, k.maxRange)} from you when it lands: everything within ${size} of them (up to 14 m)`;
+  if (k.aim === 'set') return `set at a spot you pick, ${span(k.minRange, k.maxRange)} from you and in sight: everything within ${size} of it (up to 14 m), wherever anyone moves`;
+  return `centred on you: everything within ${size} of you (up to the edge of ${R[k.maxRange]})`;
+};
 
 // Each template: what it is, its knobs, and how knobs become technique fields and a description.
 export const TEMPLATES = {
@@ -26,9 +39,9 @@ export const TEMPLATES = {
   },
   area: {
     label: 'Area attack', type: 'Striker / Ruler',
-    knobs: [DTYPE, num('effMult', 'Damage ×', 0.6, 1.4, 0.05, 1), MIN_R(0), MAX_R(1), bool('bladeHits', 'Extra hit per other blade')],
-    make: (k) => ({ kind: 'attack', divisor: 3, area: true, dtype: k.dtype === 'spiritual' ? 'spiritual' : undefined, effMult: k.effMult, ranges: rangeList(k.minRange, k.maxRange), bladeHits: k.bladeHits }),
-    describe: (k) => `Area attack, no roll, ${span(k.minRange, k.maxRange)}; wind-up madra ÷ 3${k.effMult !== 1 ? `, ${k.effMult}× damage` : ''}${k.dtype === 'spiritual' ? ', spiritual damage' : ''}${k.bladeHits ? '; one extra hit per other blade close to the target' : ''}.`,
+    knobs: [DTYPE, num('effMult', 'Damage ×', 0.6, 1.4, 0.05, 1), MIN_R(0), MAX_R(1), ...AREA_KNOBS, bool('bladeHits', 'Extra hit per other blade')],
+    make: (k) => ({ kind: 'attack', divisor: 3, area: true, dtype: k.dtype === 'spiritual' ? 'spiritual' : undefined, effMult: k.effMult, ranges: rangeList(k.minRange, k.maxRange), ...areaFields(k), bladeHits: k.bladeHits }),
+    describe: (k) => `Area attack, no roll, ${areaText(k)}; wind-up madra ÷ 3${k.effMult !== 1 ? `, ${k.effMult}× damage` : ''}${k.dtype === 'spiritual' ? ', spiritual damage' : ''}${k.bladeHits ? '; one extra hit per other blade close to the target' : ''}.`,
   },
   empowered: {
     label: 'Empowered strike', type: 'Enforcer',
@@ -38,9 +51,9 @@ export const TEMPLATES = {
   },
   ruler: {
     label: 'Ruler technique', type: 'Ruler',
-    knobs: [DTYPE, num('effMult', 'Damage ×', 0.6, 1.4, 0.05, 1), MIN_R(0), MAX_R(1)],
-    make: (k) => ({ kind: 'attack', divisor: 2, area: true, ruler: true, dtype: k.dtype === 'spiritual' ? 'spiritual' : undefined, effMult: k.effMult, ranges: rangeList(k.minRange, k.maxRange) }),
-    describe: (k) => `Long build-up, then a wide blast: no channel cap, wind-up madra ÷ 2, and you act again soon while it builds. Area attack, no roll, ${span(k.minRange, k.maxRange)}${k.effMult !== 1 ? `, ${k.effMult}× damage` : ''}.`,
+    knobs: [DTYPE, num('effMult', 'Damage ×', 0.6, 1.4, 0.05, 1), MIN_R(0), MAX_R(1), ...AREA_KNOBS],
+    make: (k) => ({ kind: 'attack', divisor: 2, area: true, ruler: true, dtype: k.dtype === 'spiritual' ? 'spiritual' : undefined, effMult: k.effMult, ranges: rangeList(k.minRange, k.maxRange), ...areaFields(k) }),
+    describe: (k) => `Long build-up, then a wide blast: no channel cap, wind-up madra ÷ 2, and you act again soon while it builds. Area attack, no roll, ${areaText(k)}${k.effMult !== 1 ? `, ${k.effMult}× damage` : ''}.`,
   },
   stance: {
     label: 'Stance', type: 'Enforcer stance',

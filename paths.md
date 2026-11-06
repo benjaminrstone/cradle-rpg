@@ -14,7 +14,7 @@ Fire and destruction madra. Black Flame hits harder for its madra than anything 
 | --- | --- | --- | --- | --- |
 | Dragon's Breath | Striker | Any, up to channel cap | Madra ÷ 4 | A beam of black fire. 11 / 20 / 33 damage. +1 to hit. Any range; best at Mid |
 | Burning Cloak | Enforcer stance | 6 to raise | 1 | Speed ×1.5 and +5 physical damage. Upkeep 5 madra per tick |
-| Void Dragon's Dance | Ruler | Any amount: no channel cap | Madra ÷ 2 | A finisher: a long build-up, then one blast of black fire over a wide area. As a Ruler technique, you keep acting while it builds. Area attack, no roll; hits everything within Mid range of you, behind no obstacle. 21 / 43 / 64 damage at 12 / 20 / 30 madra (wind-ups of about 5, 8.5 and 13 ticks). Boosted by fire and destruction in the area: +1 damage for every point of Black Flame madra spent while it winds up |
+| Void Dragon's Dance | Ruler | Any amount: no channel cap | Madra ÷ 2 | A finisher: a long build-up, then one blast of black fire over a wide area. As a Ruler technique, you keep acting while it builds. Area attack centred on you, no roll: hits everything you can see within 4 m + 0.5 m per madra (up to 14 m). 21 / 43 / 64 damage at 12 / 20 / 30 madra (wind-ups of about 5, 8.5 and 13 ticks). Boosted by fire and destruction in the area: +1 damage for every point of Black Flame madra spent while it winds up |
 
 **Learning the Path:** Dragon's Breath, Burning Cloak and Void Dragon's Dance are core (free).
 
@@ -30,7 +30,7 @@ Sword madra. Sword aura cuts, so it slips past toughness, and the Path's signatu
 
 | Technique | Type | Madra | Wind-up | Effect |
 | --- | --- | --- | --- | --- |
-| Endless Sword | Striker / Ruler | 1.5 per point of power; what's spent fits the channel cap (power 10 for 15 madra at a typical cap) | Power ÷ 6 | Fast: sword aura slashes everything within Mid range of you, including constructs, unless an obstacle is in the way. 6 / 11 damage to each target at power 6 / 10. Area attack: no roll. Each target is hit once more for every other blade close to it: an opponent's weapon, a Forged sword, a blade on the ground. Your own weapon doesn't count; it's what makes the others resonate |
+| Endless Sword | Striker / Ruler | 1.5 per point of power; what's spent fits the channel cap (power 10 for 15 madra at a typical cap) | Power ÷ 6 | Fast: sword aura slashes everything you can see within 4 m + 0.5 m per point of power of you (up to 14 m), constructs included. 6 / 11 damage to each target at power 6 / 10. Area attack: no roll. Each target is hit once more for every other blade close to it: an opponent's weapon, a Forged sword, a blade on the ground. Your own weapon doesn't count; it's what makes the others resonate |
 | Rippling Sword | Striker | Any, up to channel cap | Madra ÷ 4 | A strike whose edge extends into a wave of sword aura. 10 + madra × efficiency: 18 / 25 / 36. Any range; best at Close or Mid (−1 to hit at Far) |
 | Flowing Sword | Enforcer stance | 4 to raise | 1 | Builds up while held, with no limit: every 5 ticks, +10% Speed and +1 sharpness. Upkeep starts at 1 madra per 2 ticks and rises by 0.1 madra per tick with each build-up, so the pool is what eventually stops it. A hit of twice your interrupt threshold breaks it, like any stance: it drops and all build-up is lost |
 
