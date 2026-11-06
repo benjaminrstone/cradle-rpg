@@ -666,7 +666,8 @@ function renderQueue(ghost = null) {
   const items = timelineItems(ghost);
   const origin = whole ? 0 : game.time;
   const times = items.flatMap((i) => (i.kind === 'bar' ? [i.end] : [i.time]));
-  const horizon = Math.max(6, ...times.map((t) => Math.ceil(t - origin + 0.5)));
+  // Leave room past the last item for its "next turn in N" tag.
+  const horizon = Math.max(6, ...times.map((t) => Math.ceil((t - origin) * 1.15 + 0.5)));
   const at = (t) => `${Math.max(0, Math.min(100, ((t - origin) / horizon) * 100))}%`;
 
   if (!q.querySelector('.tl-body')) {
@@ -782,9 +783,24 @@ function currentGhost() {
     return game.projectReaction(m.current.choice, m.current.block);
   }
   if (p.kind !== 'turn') return null;
+  // The mouse on the field previews the open action there: a move to that spot, an area aimed
+  // there, or an attack on that target.
+  if (ui.fieldHover && !(ui.hover && ui.hover.key)) {
+    const k = ui.fieldHover.key;
+    return game.project(game.current(), k, ui.amount[k] || 0, ui.fieldHover.value);
+  }
   const k = (ui.hover && ui.hover.key) || ui.selected;
   if (!k) return null;
   return game.project(game.current(), k, ui.amount[k] || 0, ui.target[k] || '');
+}
+
+// The field reports what the mouse is on; preview it on the bars and the timeline (not the
+// field itself, which draws its own hover).
+function onFieldHover(value) {
+  ui.fieldHover = value == null || !ui.fieldKey ? null : { key: ui.fieldKey, value };
+  const ghost = currentGhost();
+  game.fighters.forEach((f) => renderFighter(f, ghost));
+  renderQueue(ghost);
 }
 
 // What the field shows: on a person's turn, they can pick a destination; the route ghost is the
@@ -806,8 +822,10 @@ function fieldOpts(ghost) {
   const f = human ? game.current() : null;
   const key = human ? (ui.hover && ui.hover.key) || ui.selected : null;
   const opt = key ? game.turnOptions(f).find((o) => o.key === key) : null;
-  const out = { picking: null, plan, onPick: pickPoint, onTarget: pickTarget, area: ghost && ghost.area ? ghost.area : null, aiming: null, reach: null, flight: null };
+  const out = { picking: null, plan, onPick: pickPoint, onTarget: pickTarget, onHover: onFieldHover, area: ghost && ghost.area ? ghost.area : null, aiming: null, reach: null, flight: null };
+  ui.fieldKey = null;
   if (!human) return out;
+  ui.fieldKey = opt ? key : 'move';
   if (!opt) return { ...out, picking: p.fighter };
   if (opt.point && opt.point.area) return { ...out, picking: p.fighter, aiming: { key, amount: ui.amount[key] || 0 } };
   if (opt.point) {
@@ -879,6 +897,7 @@ function renderGhost() {
 
 function render() {
   ui.hover = null;
+  ui.fieldHover = null;
   renderPrompt();
   renderGhost();
   renderLog();

@@ -10,7 +10,10 @@ import { RANGES, moveTime } from './rules.js';
 import * as A from './arena.js';
 
 const NS = 'http://www.w3.org/2000/svg';
-const view = { game: null, picking: null, onPick: null, hoverAt: null, aiming: null, reach: null, onTarget: null, flight: null };
+const view = { game: null, picking: null, onPick: null, hoverAt: null, aiming: null, reach: null, onTarget: null, flight: null, onHover: null };
+// What the mouse is on, for the page to preview (a spot "x:y", or a target id): null when nothing.
+let hoverValue = null;
+let lastHover = 'none';
 // Per fighter: where the token was last sent, at what game time, and the moves seen so far.
 const trail = new Map();
 const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -192,9 +195,21 @@ function snapTarget(p) {
   return best && best.d < 3 ? best : null;
 }
 
+// Draw the hover, then tell the page what's under the mouse when that changes, so it can
+// preview the choice there (a move's time on the timeline, say).
+function drawHover(arena) {
+  hoverValue = null;
+  drawHoverAt(arena);
+  const key = hoverValue == null ? 'none' : `v:${hoverValue}`;
+  if (key !== lastHover) {
+    lastHover = key;
+    if (view.onHover) view.onHover(hoverValue);
+  }
+}
+
 // While picking a destination: the route to the spot under the mouse, how long it takes, and the range then.
 // While a targeted attack is open: which target the mouse is on, and whether it's in reach.
-function drawHover(arena) {
+function drawHoverAt(arena) {
   const layer = arena.querySelector('.hover');
   const tip = arena.querySelector('.arena-tip');
   layer.replaceChildren();
@@ -212,6 +227,7 @@ function drawHover(arena) {
     layer.appendChild(svg('circle', { class: `snap${t.ok ? '' : ' bad'}`, cx: t.at.x, cy: t.at.y, r: 1.1 }));
     tip.classList.toggle('bad', !t.ok);
     tip.textContent = t.ok ? `${t.label}${t.chance != null ? ` · ${Math.round(t.chance * 100)}% to hit` : ''} · click to target` : `${t.label}: ${t.why}`;
+    if (t.ok) hoverValue = t.id;
     return;
   }
   if (view.aiming) {
@@ -228,6 +244,7 @@ function drawHover(arena) {
       g.appendChild(shapeEl(shape, 'area aim'));
       const k = game.inArea(shape, game.pos(o));
       tip.textContent = `${fmt(A.dist(line.origin, line.end))} m beam · ${o.name} ${k.inside ? 'in its path' : 'out of its path'} now`;
+      hoverValue = A.pointText(view.hoverAt);
       return;
     }
     const spot = game.planArea(f, prof, view.hoverAt);
@@ -236,6 +253,7 @@ function drawHover(arena) {
     if (spot.error) { tip.textContent = spot.error; return; }
     const k = game.areaCatch(spot.centre, prof.radius, game.pos(o));
     tip.textContent = `${fmt(spot.dist)} m away · ${fmt(prof.radius)} m radius · ${o.name} ${k.inside ? 'inside' : k.outside ? 'outside' : `behind a ${k.blockedBy.name}`} now`;
+    hoverValue = A.pointText(view.hoverAt);
     return;
   }
   const plan = view.flight ? game.planMove(f, view.hoverAt, view.flight) : game.planMove(f, view.hoverAt);
@@ -251,6 +269,7 @@ function drawHover(arena) {
   tip.classList.remove('bad');
   tip.textContent = `${fmt(plan.length)} m · ${fmt(w)} ticks · ${RANGES[A.bandOf(gap)]} (${fmt(gap)} m)`;
   const g = svg('g', { class: `theme-${f.theme}` });
+  hoverValue = A.pointText(view.hoverAt);
   g.appendChild(svg('polyline', { class: 'route hover-route', points: points(plan.from, plan.path) }));
   g.appendChild(svg('circle', { class: 'spot', cx: plan.dest.x, cy: plan.dest.y, r: 0.35 }));
   layer.appendChild(g);
@@ -269,6 +288,9 @@ export function renderField(game, opts = {}) {
   view.picking = opts.picking ?? null;
   view.onPick = opts.onPick || null;
   view.onTarget = opts.onTarget || null;
+  view.onHover = opts.onHover || null;
+  // A new decision: report the spot under the mouse afresh.
+  if (view.decision !== game.decision) { view.decision = game.decision; lastHover = 'none'; }
   if (root.querySelector('.arena')?.dataset.layout !== `${game.arena.name}:areas`) build(root, game);
   const arena = root.querySelector('.arena');
   const pos = game.fighters.map((f) => game.pos(f));
