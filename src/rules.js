@@ -17,6 +17,18 @@ export const TIMING = {
   interruptStagger: 1,  // an interrupted fighter's next action comes this soon
 };
 
+// How long a wait is: as chosen, within the limits.
+export function waitTime(t) {
+  return Math.min(TIMING.waitMax, Math.max(TIMING.waitMin, Number(t) || TIMING.waitDefault));
+}
+
+// Crown stars: 2 spiritual damage per madra before reduction, +1 to hit. Forging one gives you
+// your next turn after 1 tick; dropping stars takes 0.5 ticks and they land 0.5 ticks later.
+export const STAR = { damagePerMadra: 2, toHit: 1, forgeRecovery: 1, dropTime: 0.5 };
+
+// Constructs don't dodge; rolled attacks against them need to beat this.
+export const CONSTRUCT_DEFENSE = 10;
+
 export const STRIKE_DAMAGE = 10;
 
 // Area attacks can't miss, so they pay for it in damage.
