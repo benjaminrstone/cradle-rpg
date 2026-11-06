@@ -39,7 +39,7 @@ jobs:
           python3 -m py_compile serve.py claude_player.py
 
       - name: Package release
-        run: tar czf release.tar.gz index.html styles.css src serve.py claude_player.py ecosystem.config.cjs \n            seed.md battlefield.md stats.md techniques.md paths.md traits.md
+        run: tar czf release.tar.gz index.html styles.css src serve.py claude_player.py ecosystem.config.cjs seed.md battlefield.md stats.md techniques.md paths.md traits.md
 
       - name: Upload release to server
         uses: appleboy/scp-action@v1
