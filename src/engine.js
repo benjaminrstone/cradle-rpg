@@ -1329,6 +1329,61 @@ export class Game {
     return `${dmg} to ${o.name} after reduction · ${roll}${breaks(each)}${out}`;
   }
 
+  // What a queued event would do to its target's bars if it landed now, as a projection like
+  // project() makes: damage after reduction (as if every hit lands) and a short note. Null for
+  // events that don't hit anyone (moves, stances, constructs forming).
+  projectEvent(id) {
+    const e = this.events.find((x) => x.id === Number(id));
+    if (!e) return null;
+    const f = this.fighters[e.actor];
+    const o = this.opponent(f);
+    const a = e.action;
+    const out = { deltas: [{}, {}], notes: ['', ''], queue: [], replacesTurn: null };
+    const hit = (results, note) => {
+      const total = results.reduce((sum, r) => sum + r.dmg, 0);
+      if (total > 0) out.deltas[o.index][results[0].track] = -total;
+      const breaks = results.some((r) => r.breaksStances) ? ' · breaks stances' : results.some((r) => r.interrupts) && o.windups.some((w) => !this.isPlainStrike(w)) ? ' · breaks wind-ups' : '';
+      out.notes[o.index] = `${note}${breaks}`;
+      return out;
+    };
+    if (a.kind === 'forged') {
+      const sp = this.starProfile(f, a.madra);
+      return hit([this.hitResult(f, o, sp)], `when dropped, if it hits (${pct(this.hitChance(f, o, sp))})`);
+    }
+    if (a.kind === 'zonePulse') {
+      const zone = f.zones.find((z) => z.id === a.zone);
+      if (!zone || !this.inArea(zone.shape, this.pos(o)).inside) return null;
+      return hit([this.hitResult(f, o, zone.pulse)], 'if still inside');
+    }
+    const prof = a.profile;
+    if (!prof) return null;
+    if (prof.effect === 'pulse') {
+      const names = this.pulseTargets(o, prof.madra, prof.ranges).map((x) => x.name);
+      out.notes[o.index] = names.length ? `unless blocked: ${names.join(', ')} break` : 'nothing cheap enough to break';
+      return out;
+    }
+    if (prof.effect === 'disrupt') {
+      out.notes[o.index] = `if it hits (${pct(this.hitChance(f, o, prof))}): wind-ups and stances break`;
+      return out;
+    }
+    if (prof.target) { out.notes[o.index] = 'aimed at a construct'; return out; }
+    const w = f.windups.find((x) => x.eventId === e.id);
+    const boosted = w && w.boost ? { ...prof, damage: prof.damage + w.boost } : prof;
+    if (prof.radius != null || prof.shape) {
+      const l = this.areaLands(f, boosted, e.time);
+      if (!l.ok) { out.notes[o.index] = `misses as things stand: ${l.why}`; return out; }
+      if (boosted.zone) {
+        const pulses = Math.floor(boosted.zone.duration / boosted.zone.every + EPS) + 1;
+        return hit([this.hitResult(f, o, { ...boosted, damage: (boosted.damage * R.ZONE_TOTAL) / pulses })], `per pulse while inside${boosted.zone.slow ? `, Speed −${pct(boosted.zone.slow)}` : ''}`);
+      }
+    } else if (!boosted.overhead && !this.reaches(boosted, this.pos(f, e.time), this.pos(o, e.time))) {
+      out.notes[o.index] = 'out of reach or blocked as things stand';
+      return out;
+    }
+    const hits = this.hitsAgainst(f, o, boosted);
+    return hit(this.hitResults(f, o, boosted, hits), boosted.area ? 'no roll' : `if ${hits > 1 ? 'all hit' : 'it hits'} (${pct(this.hitChance(f, o, boosted))}${hits > 1 ? ' each' : ''})`);
+  }
+
   // The same, for one of a fighter's wind-ups.
   describeWindup(w) {
     return this.describeEvent(this.events.find((e) => e.id === w.eventId));

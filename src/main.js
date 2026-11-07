@@ -780,6 +780,7 @@ function renderLog() {
 // With nothing hovered, the selected menu row (or the reaction being built) is previewed.
 function currentGhost() {
   const p = game.prompt;
+  if (ui.hoverEv != null && !(ui.hover && (ui.hover.key || ui.hover.react))) return game.projectEvent(ui.hoverEv);
   if (!p || claudeToAct(game)) return null;
   if (p.kind === 'reaction') {
     const hovered = ui.hover && ui.hover.react;
@@ -903,6 +904,7 @@ function renderGhost() {
 function render() {
   ui.hover = null;
   ui.fieldHover = null;
+  ui.hoverEv = null;
   renderPrompt();
   renderGhost();
   renderLog();
@@ -1085,6 +1087,14 @@ function highlight(ev) {
 document.addEventListener('mouseover', (e) => {
   const t = e.target.closest('[data-ev]');
   highlight(t ? t.dataset.ev : null);
+  // Hovering a queued action (on the timeline, or a wind-up chip) shows what it would do to
+  // its target's bars if it landed now.
+  const ev = t ? t.dataset.ev : null;
+  if (ev !== ui.hoverEv) {
+    ui.hoverEv = ev;
+    const ghost = currentGhost();
+    game.fighters.forEach((f) => renderFighter(f, ghost));
+  }
 });
 
 document.addEventListener('mouseover', (e) => {
