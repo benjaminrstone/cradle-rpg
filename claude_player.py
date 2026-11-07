@@ -24,6 +24,7 @@ DOCS = ["seed.md", "battlefield.md", "stats.md", "techniques.md", "paths.md", "t
 DEFAULT_MODEL = "claude-opus-5-5"
 DEFAULT_EFFORT = "medium"
 MAX_ATTEMPTS = 3
+MAX_THOUGHTS = 12  # recent decisions kept per game for the app's thinking panel
 # Dollars per million tokens: input, output, cache read, cache write (5-minute).
 PRICES = {
     "claude-opus-5-5": (4.0, 20.0, 0.20, 5.0),
@@ -184,7 +185,7 @@ Answer every decision by calling make_move once. Each action has a key, an amoun
 
 An option marked unavailable can't be chosen. If your last move was rejected, the board says why under ERROR; pick something else.
 
-Use the plan field for a short note to yourself (a sentence or two): what you're setting up, what you've learned about the opponent. You'll see it at your next decision. The opponent never sees it.
+Use the plan field for a short note to yourself (a sentence or two): what you're setting up, what you've learned about the opponent. You'll see it at your next decision. The app has a folded-away panel where your opponent can choose to read this note and a summary of your thinking; play as you would anyway.
 
 The design docs follow."""
 
@@ -256,6 +257,7 @@ class AutoPlayer:
         self.latest = None  # the newest board, to look at again when a thought finishes
         self.tries = {}  # decision key -> {"attempts": n, "sent": move id or None}
         self.plans = {}  # game id -> Claude's note to itself
+        self.thoughts = {}  # game id -> Claude's recent decisions: thinking summary, note and move
         self.spent = {}  # game id -> dollars so far
         self.error = ""
         self.client = None
@@ -297,6 +299,7 @@ class AutoPlayer:
             "thinking": self.busy is not None,
             "error": self.error,
             "spent": None if spent is None else round(spent, 2),
+            "thoughts": self.thoughts.get(game_id, []),
         }
 
     def on_state(self, s):
@@ -337,8 +340,21 @@ class AutoPlayer:
 
     def think(self, s, key, tries):
         try:
-            actions, plan = self.ask(s)
+            actions, plan, thinking = self.ask(s)
             move = {"id": uuid.uuid4().hex, "gameId": s["gameId"], "decision": s["decision"], "actions": actions}
+            # Record the thought before sending the move, so the app finds it when the move lands.
+            recent = self.thoughts.setdefault(s["gameId"], [])
+            recent.append({
+                "decision": s["decision"],
+                "time": s.get("time"),
+                "kind": (s.get("prompt") or {}).get("kind"),
+                "thinking": thinking,
+                "plan": plan,
+                "move": ", ".join(a["key"] + (f" {a['amount']:g}" if a["amount"] else "") + (f" @{a['target']}" if a["target"] else "") for a in actions),
+            })
+            del recent[:-MAX_THOUGHTS]
+            if len(self.thoughts) > 20:
+                self.thoughts = {s["gameId"]: recent}
             self.write_move(json.dumps(move).encode())
             tries["sent"] = move["id"]
             self.plans[s["gameId"]] = plan
@@ -366,6 +382,7 @@ class AutoPlayer:
         messages = [{"role": "user", "content": board}]
         model = self.model()
         started = time.time()
+        thinking = []
         for _ in range(2):
             response = self.client.beta.messages.create(
                 model=model,
@@ -374,6 +391,9 @@ class AutoPlayer:
                 tools=[MOVE_TOOL],
                 messages=messages,
                 output_config={"effort": self.effort()},
+                # Summaries of Claude's thinking, shown folded away in the app. Without this the
+                # model still thinks, but the API leaves the text out.
+                thinking={"type": "adaptive", "display": "summarized"},
                 betas=["server-side-fallback-2026-07-01"],
                 fallbacks="default",
             )
@@ -389,9 +409,10 @@ class AutoPlayer:
             )
             if response.stop_reason == "refusal":
                 raise RuntimeError("Claude declined to answer this one.")
+            thinking += [b.thinking for b in response.content if b.type == "thinking" and b.thinking]
             call = next((b for b in response.content if b.type == "tool_use" and b.name == "make_move"), None)
             if call:
-                return clean(call.input)
+                return (*clean(call.input), "\n\n".join(thinking).strip())
             # No move: ask once more, keeping the reply so the history stays as it was.
             messages = messages + [
                 {"role": "assistant", "content": response.content},

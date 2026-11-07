@@ -7,7 +7,7 @@ import { fmt } from './engine.js';
 import { RANGES } from './rules.js';
 import { BANDS } from './arena.js';
 
-const state = { side: loadSide(), via: loadVia(), lastMoveId: null, takeOver: null, error: '', poll: null, post: null, api: null };
+const state = { side: loadSide(), via: loadVia(), lastMoveId: null, takeOver: null, error: '', poll: null, post: null, api: null, statusFor: null };
 let getGame = () => null;
 let rerender = () => {};
 
@@ -29,6 +29,7 @@ function saveSide(v) {
 }
 
 const decisionKey = (game) => `${game.id}:${game.decision}`;
+const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export const claudeSide = () => state.side;
 
@@ -39,6 +40,7 @@ export function initClaude(gameGetter, render) {
   select.addEventListener('change', () => {
     state.side = select.value === '' ? null : Number(select.value);
     state.error = '';
+    state.statusFor = null;
     saveSide(state.side);
     rerender();
   });
@@ -48,8 +50,15 @@ export function initClaude(gameGetter, render) {
     state.via = via.value === 'chat' ? 'chat' : 'api';
     state.error = '';
     state.api = null;
+    state.statusFor = null;
     try { localStorage.setItem('claudeVia', state.via); } catch { /* storage unavailable */ }
     rerender();
+  });
+  // The thinking panel starts folded; remember if it was opened.
+  const mind = document.getElementById('claude-mind');
+  try { mind.open = localStorage.getItem('claudeMindOpen') === '1'; } catch { /* storage unavailable */ }
+  mind.addEventListener('toggle', () => {
+    try { localStorage.setItem('claudeMindOpen', mind.open ? '1' : '0'); } catch { /* storage unavailable */ }
   });
   document.addEventListener('click', (e) => {
     if (e.target.closest('[data-takeover]')) {
@@ -109,6 +118,7 @@ export function syncClaude(game) {
     select.dataset.names = names;
   }
   select.value = state.side == null ? '' : String(state.side);
+  renderMind(game);
 
   if (state.side == null) {
     stopPolling();
@@ -118,6 +128,37 @@ export function syncClaude(game) {
   state.post = setTimeout(() => postState(getGame()), 100);
   if (claudeToAct(game)) startPolling();
   else stopPolling();
+  // Fetch the status once per decision too, so Claude's thinking shows up once its move lands.
+  if (state.via === 'api' && state.statusFor !== decisionKey(game)) {
+    state.statusFor = decisionKey(game);
+    pollStatus(game);
+  }
+}
+
+// Claude's recent decisions through the API: the summary of its thinking, its note to itself,
+// and the move it made. Newest first.
+function renderMind(game) {
+  const panel = document.getElementById('claude-mind');
+  const api = state.via === 'api' && state.side != null ? state.api : null;
+  panel.hidden = !api;
+  if (!api) return;
+  const thoughts = api.thoughts || [];
+  const f = game.fighters[state.side];
+  const busy = api.thinking && claudeToAct(game);
+  document.getElementById('claude-mind-count').textContent = busy ? 'thinking…' : thoughts.length ? `${thoughts.length} recent` : '';
+  const what = { turn: 'turn', reaction: 'reaction', opportunity: 'opportunity' };
+  const rows = thoughts.slice().reverse().map((t) => `
+    <div class="thought">
+      <div class="th-head">t=${t.time == null ? '?' : fmt(t.time)} · ${what[t.kind] || 'decision'} → <b>${esc(t.move)}</b></div>
+      <div class="th-body">${t.thinking ? esc(t.thinking).replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>') :'<span class="muted">No thinking shown for this one.</span>'}</div>
+      ${t.plan ? `<div class="th-note">Note to itself: ${esc(t.plan)}</div>` : ''}
+    </div>`).join('');
+  const html = rows || `<p class="empty">Nothing yet. ${esc(f.name)}'s thinking shows here after each move Claude makes.</p>`;
+  const list = document.getElementById('claude-mind-list');
+  if (list.dataset.html !== html) {
+    list.innerHTML = html;
+    list.dataset.html = html;
+  }
 }
 
 function startPolling() {

@@ -318,6 +318,15 @@ span.draw-offer { font-size: 12px; padding: 2px 9px; border: 1px solid; border-r
 .waiting { display: flex; align-items: center; gap: 8px; color: var(--muted); }
 .waiting .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent, var(--sword)); animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.25; } }
+/* Claude's thinking summaries, folded away unless opened. */
+.mind { flex: 0 1 auto; max-height: 40%; overflow: auto; padding: 8px 12px; }
+.mind summary { cursor: pointer; user-select: none; }
+.mind[open] summary { margin-bottom: 6px; }
+.thought { border-top: 1px solid var(--line); padding: 7px 0; font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+.thought .th-head { color: var(--muted); }
+.thought .th-head b { color: var(--text); font-weight: 600; }
+.thought .th-body { white-space: pre-wrap; line-height: 1.45; }
+.thought .th-note { color: var(--muted); font-style: italic; }
 
 /* ---------- log ---------- */
 .log { flex: 0 0 200px; min-height: 0; overflow: auto; padding: 10px 12px; }
