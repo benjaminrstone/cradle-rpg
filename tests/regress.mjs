@@ -110,6 +110,12 @@ function pointsFor(game, f, o, rnd) {
   return out;
 }
 
+// Courses to try: keep, stop, toward, away, and a spot near the opponent.
+function walksFor(game, f, rnd) {
+  const opp = game.pos(game.opponent(f));
+  return ['keep', 'stop', 'toward', 'away', `${Math.round((opp.x + (rnd() * 8 - 4)) * 10) / 10}:${Math.round((opp.y + (rnd() * 8 - 4)) * 10) / 10}`];
+}
+
 function variants(game, f, o, rnd) {
   const amounts = o.slider ? [...new Set([o.slider.min, o.slider.max, o.slider.initial,
     o.slider.min + Math.round(rnd() * (o.slider.max - o.slider.min) / o.slider.step) * o.slider.step])] : [0];
@@ -145,9 +151,13 @@ function playFight(defs, seed) {
       const weighted = choices.filter(([k]) => !(k.startsWith('drop:') || k === 'wait') || rnd() < 0.15);
       const pool = weighted.length ? weighted : choices;
       const [k, a, t] = pool[Math.floor(rnd() * pool.length)];
+      // Walk somewhere alongside, some of the time.
+      const walks = walksFor(game, f, rnd);
+      const w = k === 'move' ? 'keep' : walks[Math.floor(rnd() * walks.length)];
+      if (w !== 'keep') step('walkPreview', { k, a, t, w, pv: game.preview(f, k, a, t, w), pj: game.project(f, k, a, t, w) });
       if (rnd() < 0.02) game.setDrawOffer(f.index, !game.drawOffers[f.index]);
-      game.act(k, a, t);
-      step('act', { k, a, t });
+      game.act(k, a, t, game.preview(f, k, a, t, w).enabled ? w : 'keep');
+      step('act', { k, a, t, w });
     } else if (p.kind === 'reaction') {
       const ro = game.reactionOptions();
       step('reaction', ro);
@@ -165,8 +175,17 @@ function playFight(defs, seed) {
       }
       const c = legal[Math.floor(rnd() * legal.length)];
       const b = blocks[Math.floor(rnd() * blocks.length)];
-      game.react(c, b);
-      step('react', { c, b });
+      const w = rnd() < 0.25 ? walksFor(game, game.fighters[p.fighter], rnd)[1 + Math.floor(rnd() * 4)] : 'keep';
+      if (w !== 'keep') step('reactWalk', { w, out: game.reactionOutcome(c, b, w), pj: game.projectReaction(c, b, w) });
+      game.react(c, b, w);
+      step('react', { c, b, w });
+    } else if (p.kind === 'course') {
+      const f = game.fighters[p.fighter];
+      const walks = walksFor(game, f, rnd);
+      for (const w of walks) step('course', { w, pv: game.coursePreview(w), pj: game.projectCourse(w) });
+      const w = rnd() < 0.6 ? 'keep' : walks[Math.floor(rnd() * walks.length)];
+      game.course(game.coursePreview(w).enabled ? w : 'keep');
+      step('courseChoice', { w });
     } else if (p.kind === 'opportunity') {
       step('opportunity', game.opportunityOptions());
       const c = rnd() < 0.6 ? 'strike' : 'let';

@@ -173,6 +173,22 @@ export function along(from, pts, s) {
   return { x: p.x, y: p.y };
 }
 
+// Walk s metres along the path from `from` through pts: where you get to, and the points still ahead.
+export function walkAlong(from, pts, s) {
+  let p = from;
+  for (let i = 0; i < pts.length; i++) {
+    const q = pts[i];
+    const d = dist(p, q);
+    if (s < d - 1e-9) {
+      const k = s / d;
+      return { p: { x: p.x + (q.x - p.x) * k, y: p.y + (q.y - p.y) * k }, rest: pts.slice(i) };
+    }
+    s -= d;
+    p = q;
+  }
+  return { p: { x: p.x, y: p.y }, rest: [] };
+}
+
 // The nearest spot a fighter can stand to p: p itself, or the closest found on rings around it.
 export function nearestStandable(arena, p) {
   const c = { x: Math.min(arena.width - RADIUS, Math.max(RADIUS, p.x)), y: Math.min(arena.height - RADIUS, Math.max(RADIUS, p.y)) };

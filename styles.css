@@ -273,6 +273,17 @@ span.draw-offer { font-size: 12px; padding: 2px 9px; border: 1px solid; border-r
 .point-pick b { color: var(--text); font-weight: 600; }
 .point-pick button { padding: 2px 8px; font-size: 12px; }
 
+/* Walk bar: where to walk alongside the decision. */
+.walk-bar {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--muted);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08)); border-radius: 8px; padding: 5px 9px; margin: 6px 0;
+}
+.walk-bar .label { margin-right: 2px; }
+.walk-bar b { color: var(--text); font-weight: 600; }
+.walk-bar .walk-btns { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.walk-bar button { padding: 2px 8px; font-size: 12px; }
+.walk-bar button.on { border-color: var(--accent, #6b7385); color: var(--accent, var(--text)); }
+
 /* ---------- reaction ---------- */
 .incoming {
   border: 1px solid var(--accent); background: linear-gradient(90deg, var(--accent-dim), transparent 85%);

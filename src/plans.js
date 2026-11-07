@@ -14,9 +14,35 @@ export const TURN = { turn: true }; // a plan's queue entry for the fighter's ne
 const notEnough = { enabled: false, reason: 'Not enough madra', lines: [] };
 
 export const PLANS = {
+  // A strike chosen out of reach follows the opponent (unless told to walk elsewhere) and waits
+  // to start until it would land in reach, as things stand; it gives up after chaseMax ticks.
   strike(g, f, { target, spd, tc }) {
     const prof = { ...g.attackProfile(f, 'strike'), target };
     const w = R.physTime(R.TIMING.strikeWindup, spd);
+    if (!tc && !g.strikeLands(f, prof, w, g.time)) {
+      const h = g.hypo;
+      if (h.kept && !(h.walk && h.walk.follow)) h.walk = { follow: true };
+      const at = g.strikeStart(f, prof, w);
+      const giveUp = g.time + R.TIMING.chaseMax;
+      const lands = at != null ? at + w : null;
+      return {
+        enabled: true, reason: '',
+        warning: at == null ? `Out of reach, and not within reach in ${fmt(R.TIMING.chaseMax)} ticks as things stand: you'd give up at t=${fmt(giveUp)}` : null,
+        lines: [
+          at != null ? `Out of reach: closes in, and the strike starts t=${fmt(at)}, as soon as it would land in reach · lands t=${fmt(lands)} · next turn then` : `Out of reach: closes in, giving up at t=${fmt(giveUp)} if it never would land in reach`,
+          g.attackLines(f, prof, prof.hits, null, R.RANGE_METRES[0]),
+          'It starts on its own when it would land in reach, wherever they go; once started, backing off far enough makes it land short',
+        ],
+        nextTurn: lands ?? giveUp,
+        queue: lands != null ? [{ time: lands, label: `${prof.name} lands`, type: 'attack' }, TURN] : [TURN],
+        project: (p) => { if (at != null) p.hit(prof, prof.hits, R.RANGE_METRES[0]); },
+        apply: () => {
+          f.pending = { prof, w, delay: 0, giveUp };
+          f.nextTurn = giveUp;
+          g.addLog(`${f.name} closes in to strike.`, '', f.index);
+        },
+      };
+    }
     const gate = tc ? g.constructGate(f, prof, tc) : g.rangeGate(f, prof, g.time + w);
     const lines = [`Wind-up ${fmt(w)} · next turn in ${fmt(w)}`, g.attackLines(f, prof, prof.hits, tc)];
     if (gate.note) lines.push(gate.note);
@@ -32,17 +58,22 @@ export const PLANS = {
     };
   },
 
-  move(g, f, { target, spd }) {
-    const plan = g.planMove(f, target);
-    if (plan.error) return { enabled: false, reason: plan.error, lines: [`${fmt(R.TIMING.moveRate * (spd / 100) ** 2)} m per tick at your Speed, around obstacles`] };
-    const w = R.moveTime(plan.length, spd);
+  // Walking with nothing else to do: the next turn comes on arrival, as things stand now.
+  move(g, f, { spd }) {
+    const h = g.hypo;
+    const rate = `${fmt(R.TIMING.moveRate * (spd / 100) ** 2)} m per tick at your Speed, around obstacles`;
+    if (h.error) return { enabled: false, reason: h.error, lines: [rate] };
+    if (!h.walk) return { enabled: false, reason: h.kept ? 'Choose where to go: click the field' : 'Already there', lines: [rate] };
+    const o = g.opponent(f);
+    if (h.walk.follow && A.dist(f.pos, g.pos(o)) <= A.TOWARD_GAP + 0.05) return { enabled: false, reason: `Already next to ${o.name}`, lines: [rate] };
+    const arr = g.arrival(f, R.TIMING.waitMax);
+    const next = g.time + Math.max(R.TIMING.moveMin, arr != null ? arr - g.time : R.TIMING.waitMax);
     return {
-      enabled: true, reason: '', lines: g.moveLines(f, plan, w, w),
-      nextTurn: g.time + w,
-      queue: [{ time: g.time + w, label: `arrives (${fmt(plan.length)} m)`, type: 'move' }, TURN],
-      path: { who: f.index, from: plan.from, path: plan.path },
-      move: plan,
-      apply: () => g.startMove(f, plan, w),
+      enabled: true, reason: '', lines: g.moveLines(f, h.walk, arr, next),
+      nextTurn: next,
+      queue: arr != null ? [{ time: arr, label: 'arrives', type: 'move' }, TURN] : [TURN],
+      path: g.routeAhead(f, arr ?? next),
+      apply: () => g.addLog(`${f.name} walks ${g.walkText(f)}${arr != null ? ` (arrives t=${fmt(arr)})` : ''}.`, '', f.index),
     };
   },
 
@@ -89,19 +120,27 @@ export const PLANS = {
     };
   },
 
-  launch(g, f, { t, target }) {
+  // A straight flight that ends any walk.
+  launch(g, f, { t, target, o }) {
     const plan = g.planMove(f, target, { reach: g.launchReach(t), flight: true });
     const enough = f.madra >= t.fixedCost;
     const head = `Costs ${t.fixedCost} madra · flies up to ${fmt(g.launchReach(t))} m in a straight line in ${fmt(t.travel)} ticks`;
     if (plan.error) return { enabled: false, reason: plan.error, lines: [head] };
+    const land = g.time + t.travel;
+    g.hypo.walk = null;
+    g.hypo.flight = { start: g.time, end: land, from: { ...plan.from }, to: { x: plan.dest.x, y: plan.dest.y } };
+    const gap = A.dist(plan.dest, g.pos(o, land));
     return {
       enabled: enough, reason: enough ? '' : 'Not enough madra',
-      lines: [head, ...g.moveLines(f, plan, t.travel, t.travel + t.recovery)],
+      lines: [head,
+        `To (${fmt(plan.dest.x)}, ${fmt(plan.dest.y)}): ${fmt(plan.length)} m · lands t=${fmt(land)} · next turn in ${fmt(t.travel + t.recovery)}`,
+        `${o.name} will be ${fmt(gap)} m away (${R.RANGES[A.bandOf(gap)]})${o.walk || o.flight ? ' counting their course' : ''}`,
+        'Ends your walk: you stand where you land'],
       cost: t.fixedCost,
       nextTurn: g.time + t.travel + t.recovery,
-      queue: [{ time: g.time + t.travel, label: `lands (${fmt(plan.length)} m)`, type: 'move' }, TURN],
+      queue: [{ time: land, label: `lands (${fmt(plan.length)} m)`, type: 'move' }, TURN],
       path: { who: f.index, from: plan.from, path: plan.path },
-      apply: () => g.startMove(f, plan, t.travel, t.name),
+      apply: () => g.startFlight(f, plan, t.travel, t.name),
     };
   },
 

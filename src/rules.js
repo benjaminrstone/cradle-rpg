@@ -5,7 +5,11 @@ export const RANGES = ['Close', 'Mid', 'Far'];
 export const TIMING = {
   strikeWindup: 2,      // physical, scaled by Speed
   moveRate: 2,          // metres per tick at Speed 100; physical, so scaled by Speed
-  moveMin: 0.5,         // the shortest a move takes
+  moveMin: 0.5,         // the soonest a Move gives your next turn
+  paceStriker: 2 / 3,   // walking pace while winding up a Striker (or other non-Forger, non-Ruler) technique
+  paceSlow: 1 / 3,      // walking pace while winding up a Forger or Ruler technique
+  reroute: 0.5,         // changing course as a reaction pushes your next turn this much later; physical, scaled by Speed
+  chaseMax: 6,          // a strike waiting to come into reach gives up after this many ticks
   dodge: 2,             // physical, scaled by Speed; pushes your next action later
   sidestep: 2,          // metres a dodge carries you out of an area at Speed 100, scaled by Speed
   blockDelay: 1,        // pushes your next action later
@@ -62,11 +66,6 @@ export function controlFactor(control) {
 // Speed counts squared, so fast fighters act much more often.
 export function physTime(base, speed) {
   return base * (100 / speed) ** 2;
-}
-
-// Walking a route: time grows with distance, shortened by Speed like any physical action.
-export function moveTime(metres, speed) {
-  return Math.max(TIMING.moveMin, physTime(metres / TIMING.moveRate, speed));
 }
 
 export function speedMod(defenderSpeed, attackerSpeed) {

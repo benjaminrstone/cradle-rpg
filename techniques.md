@@ -32,7 +32,7 @@ Numbers are for a typical fighter in units of their own stage (see stats.md): He
 
 Everyone can strike, dodge, block, move, and wait. The rest come from a fighter's Path.
 
-- **Move:** walk to any spot on the arena, around obstacles, at 2 m per tick at Speed 100 (time scales by (100 / Speed)², minimum 0.5 ticks). You are partway along the route while you move, so attacks that land mid-move are aimed at where you are then (battlefield.md).
+- **Walking** goes alongside every action: each turn you choose where to walk as well as what to do, at a pace the action allows (full for physical actions and stances, ⅔ for Striker techniques, ⅓ for Forger and Ruler ones). **Move** is walking with nothing else to do: your next turn comes when you'd arrive (battlefield.md).
 - **Wait:** pass for as many ticks as you choose.
 
 | Template | Type | Role | Madra | Wind-up | Damage | Notes |

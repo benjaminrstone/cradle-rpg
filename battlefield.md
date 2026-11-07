@@ -22,16 +22,29 @@ From the start, Close is about 6 m away: 3 ticks at Speed 100.
 
 ### Leaving Close
 
-Walking out of Close range of the opponent lets them strike you as you go. They choose: the strike lands at once (you react to it as usual), and their next turn comes later by the strike's time. Launch is too fast to catch. Keeping distance is free; getting out of melee costs something.
+Walking out of Close range of the opponent lets them strike you as you go, whenever it happens. They choose: the strike lands at once (you react to it as usual), and their next turn comes later by the strike's time. Launch is too fast to catch. Keeping distance is free; getting out of melee costs something.
 
 ## Movement
 
-- **Move:** pick any spot you can stand on. You walk the shortest route there, around obstacles, at 2 m per tick at Speed 100. Like other physical actions, the time scales by (100 / Speed)², with a minimum of 0.5 ticks. Your next turn comes when you arrive.
-- **Sidestep:** a dodge against an area attack moves you up to 2 m (more if you're fast) straight out from its centre, and stops any move you were making there.
-- **Toward and away:** shortcuts for a destination. Toward stops 1.5 m from the opponent, going around whatever is between you. Away backs off up to 6.5 m in a straight line, which from the start is just past the Far edge. It stops short of anything in the way.
-- **While moving,** you are partway along your route. Attacks and range checks use where you are at that moment.
+Walking runs alongside everything else. On your turn you pick an action and where to walk, and you keep walking while the action plays out. Your next turn comes when the action says, not when you arrive.
+
+- **Where to:** a spot (the shortest route there, around obstacles); toward the opponent, following them as they move and stopping 1.5 m away; away, straight back up to 6.5 m (from the start, just past the Far edge), stopping short of anything in the way; stop where you are; or keep your course.
+- **Pace:** 2 m per tick at Speed 100, × (Speed / 100)² like other physical actions, × how much the action leaves you free to move. With several things going at once, the slowest counts.
+
+| Doing | Pace |
+| --- | --- |
+| Nothing, waiting, strikes and other physical actions, raising a stance | Full |
+| Striker techniques, and anything else not Forger or Ruler | ⅔ |
+| Forger and Ruler techniques | ⅓ |
+
+- **Building while you walk:** techniques that build while you act (Ruler techniques, barriers, Crown stars) hold you to ⅓ until your next turn comes, then ⅔ for the rest of the build.
+- **Move:** walking with nothing else to do. Your next turn comes when you'd arrive, as things stand when you set off (at most 10 ticks).
+- **Strike when in reach:** a strike chosen out of reach follows the opponent and starts on its own at the first moment it would land in reach, given where everyone is headed. Once started it's committed: backing off far enough makes it land short. If it hasn't started after 6 ticks you give up and your next turn comes.
+- **Changing course** is free on your turn. You can also change it as a reaction: when the opponent takes a turn (anything but a wait that keeps their course), and when you react to an attack. A reaction change pushes your next turn 0.5 ticks later (a physical action, so it shrinks with Speed) and drops a strike waiting to start. It doesn't give the opponent a reaction of their own.
+- **Sidestep:** a dodge against an area attack moves you up to 2 m (more if you're fast) straight out from its centre, and stops your walk there.
+- **Positions are continuous.** Attacks and range checks use where everyone is at that moment.
 - **Fighters don't block each other.** Only obstacles and the arena walls block movement.
-- **Launch** (Oathsign) flies you up to 7 m in a straight line in 0.5 ticks. It can't pass through obstacles.
+- **Launch** (Oathsign) flies you up to 7 m in a straight line in 0.5 ticks. It can't pass through obstacles, and it ends your walk.
 
 ## Obstacles
 
@@ -50,7 +63,7 @@ Where the centre goes depends on the technique's aim:
 - **Around you:** centred on the attacker, wherever they are when it lands. Endless Sword and Void Dragon's Dance work this way.
 - **Set at a point:** you pick a spot within the technique's reach that you can see. It forms there however anyone moves afterwards, so the opponent can get out before it lands.
 
-The defender can walk out on their turn, or sidestep at the last moment (a dodge), or block. Madra Pulse is a burst around you that reaches Close range.
+The defender can walk out (changing course on their turn, or as a reaction when it starts), sidestep at the last moment (a dodge), or block. Madra Pulse is a burst around you that reaches Close range.
 
 ### Lines
 

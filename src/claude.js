@@ -89,7 +89,11 @@ export function waitingPanel(game) {
     const att = game.fighters[a.attacker];
     incoming = `<div class="incoming theme-${att.theme}"><b>${att.name}'s ${a.profile.name}</b> is landing on ${f.name}${a.hits > 1 ? ` (${a.hits} hits)` : ''}.</div>`;
   }
-  const what = p.kind === 'reaction' ? 'reaction' : 'move';
+  if (p.kind === 'course') {
+    const after = game.fighters[p.after];
+    incoming = `<div class="incoming theme-${after.theme}">${after.name} has just acted: ${f.name} can change course.</div>`;
+  }
+  const what = p.kind === 'reaction' ? 'reaction' : p.kind === 'course' ? 'choice of course' : 'move';
   const api = state.via === 'api' ? state.api : null;
   // Through the API, the server says whether it can play and whether anything went wrong.
   const trouble = api && (api.problem || (!api.thinking && api.error));
@@ -146,7 +150,7 @@ function renderMind(game) {
   const f = game.fighters[state.side];
   const busy = api.thinking && claudeToAct(game);
   document.getElementById('claude-mind-count').textContent = busy ? 'thinking…' : thoughts.length ? `${thoughts.length} recent` : '';
-  const what = { turn: 'turn', reaction: 'reaction', opportunity: 'opportunity' };
+  const what = { turn: 'turn', reaction: 'reaction', opportunity: 'opportunity', course: 'course' };
   const rows = thoughts.slice().reverse().map((t) => `
     <div class="thought">
       <div class="th-head">t=${t.time == null ? '?' : fmt(t.time)} · ${what[t.kind] || 'decision'} → <b>${esc(t.move)}</b></div>
@@ -240,9 +244,10 @@ async function pollMove() {
     why = whyNot(game, a);
     if (why) break;
     try {
-      if (game.prompt.kind === 'reaction') game.react(a.key, a.amount || 0);
+      if (game.prompt.kind === 'reaction') game.react(a.key, a.amount || 0, a.walk || 'keep');
       else if (game.prompt.kind === 'opportunity') game.opportunity(a.key);
-      else if (game.prompt.kind === 'turn') game.act(a.key, a.amount || 0, a.target || '');
+      else if (game.prompt.kind === 'course') game.course(courseOf(a));
+      else if (game.prompt.kind === 'turn') game.act(a.key, a.amount || 0, a.target || '', a.walk || 'keep');
     } catch (e) {
       why = `${a.key}: ${e.message}`;
       break;
@@ -250,21 +255,36 @@ async function pollMove() {
   }
   const stuck = !onlyDraw && !game.result && decisionKey(game) === before;
   state.error = stuck
-    ? `Claude's move (${(move.actions || []).map((a) => a.key + (a.amount ? ' ' + a.amount : '') + (a.target ? ' @' + a.target : '')).join(', ')}) wasn't valid${why ? `: ${why}` : ''}. Waiting for another.`
+    ? `Claude's move (${(move.actions || []).map((a) => a.key + (a.amount ? ' ' + a.amount : '') + (a.target ? ' @' + a.target : '') + (a.walk && a.walk !== 'keep' ? ' ~' + a.walk : '')).join(', ')}) wasn't valid${why ? `: ${why}` : ''}. Waiting for another.`
     : '';
   rerender();
 }
 
 const REACTIONS = ['take', 'dodge', 'block', 'dodgeBlock', 'redirect'];
 
+// A change-of-course answer: "keep", or "course" with a walk (a walk on its own works too).
+function courseOf(a) {
+  if (a.key === 'keep') return 'keep';
+  return a.key === 'course' ? a.walk || 'keep' : a.walk || a.key;
+}
+
 // Why an action can't be taken right now, or '' if it can.
 function whyNot(game, a) {
-  if (game.prompt.kind === 'reaction') return REACTIONS.includes(a.key) ? '' : `"${a.key}" isn't a reaction`;
+  const walkWhy = (f) => {
+    if (!a.walk || a.walk === 'keep') return '';
+    const r = game.walkOrder(f, a.walk);
+    return r.error ? `walk ${a.walk}: ${r.error}` : '';
+  };
+  if (game.prompt.kind === 'reaction') return REACTIONS.includes(a.key) ? walkWhy(game.current()) : `"${a.key}" isn't a reaction`;
   if (game.prompt.kind === 'opportunity') return a.key === 'strike' || a.key === 'let' ? '' : 'the choices are strike or let';
+  if (game.prompt.kind === 'course') {
+    const c = game.coursePreview(courseOf(a));
+    return c && c.enabled ? '' : `course: ${(c && c.reason) || 'not a course'}`;
+  }
   if (game.prompt.kind !== 'turn') return '';
   const cur = game.current();
   if (!game.turnOptions(cur).some((o) => o.key === a.key)) return `there's no option "${a.key}"`;
-  const pv = game.preview(cur, a.key, a.amount || 0, a.target || '');
+  const pv = game.preview(cur, a.key, a.amount || 0, a.target || '', a.walk || 'keep');
   return pv.enabled ? '' : `${a.key}: ${pv.reason || 'not available'}`;
 }
 
@@ -298,7 +318,9 @@ function snapshot(game) {
     }),
     at: pt(game.pos(f)),
     zones: (f.zones || []).map((z) => ({ name: z.name, until: r1(z.until), slow: r1(z.slow || 0), shape: z.shape.shape === 'line' ? { from: pt(z.shape.from), to: pt(z.shape.to), width: z.shape.width } : { centre: pt(z.shape.centre), radius: r1(z.shape.radius) } })),
-    moving: f.moving && { to: pt(f.moving.path[f.moving.path.length - 1]), arrives: r1(f.moving.end) },
+    walk: f.walk && { course: game.walkText(f), to: f.walk.to ? pt(f.walk.to) : null, arrives: f.walk.to ? r1(game.arrival(f, 20) ?? -1) : null, pace: game.paceText(game.paceAt(f, game.time)) },
+    flight: f.flight && { to: pt(f.flight.to), lands: r1(f.flight.end) },
+    closingIn: f.pending ? { givesUp: r1(f.pending.giveUp) } : null,
   }));
 
   let options = null;
@@ -347,6 +369,23 @@ function snapshot(game) {
     };
   }
 
+  let course = null;
+  if (p && p.kind === 'course') {
+    const f = game.fighters[p.fighter];
+    const after = game.fighters[p.after];
+    const ways = Object.fromEntries(['keep', 'toward', 'away', 'stop'].map((w) => {
+      const c = game.coursePreview(w);
+      return [w, { enabled: c.enabled, reason: c.reason, preview: c.lines }];
+    }));
+    course = {
+      after: after.name,
+      did: game.log.filter((l) => l.who === after.index && Math.abs(l.time - game.time) < 1e-9).map((l) => l.text),
+      now: f.walk ? `walking ${game.walkText(f)}` : 'standing',
+      delay: r1(game.courseDelay(f)),
+      ways,
+    };
+  }
+
   let opportunity = null;
   if (p && p.kind === 'opportunity') {
     const op = game.opportunityOptions();
@@ -374,6 +413,7 @@ function snapshot(game) {
     options,
     reaction,
     opportunity,
+    course,
     queue: game.upcoming().slice(0, 8).map((i) => ({ time: r1(i.time), label: i.label })),
     log: game.log.slice(-14).map((l) => `t=${fmt(l.time)} ${l.text}`),
   };

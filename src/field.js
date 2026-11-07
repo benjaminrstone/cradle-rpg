@@ -6,7 +6,7 @@
 // Area attacks show as circles: ones winding up, the hovered card's, and (while aiming an area set
 // at a point) the one under the mouse.
 import { fmt } from './engine.js';
-import { RANGES, moveTime } from './rules.js';
+import { RANGES } from './rules.js';
 import * as A from './arena.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -14,7 +14,7 @@ const view = { game: null, picking: null, onPick: null, hoverAt: null, aiming: n
 // What the mouse is on, for the page to preview (a spot "x:y", or a target id): null when nothing.
 let hoverValue = null;
 let lastHover = 'none';
-// Per fighter: where the token was last sent, at what game time, and the moves seen so far.
+// Per fighter: where the token was last sent, at what game time, and the route ahead then.
 const trail = new Map();
 const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -66,51 +66,19 @@ function shapeEl(shape, cls) {
 const progress = (game, w) => Math.min(1, Math.max(0, (game.time - w.start) / Math.max(0.01, w.end - w.start)));
 const points = (from, path) => [from, ...path].map((p) => `${p.x},${p.y}`).join(' ');
 
-// The corners of a move's route still ahead at time t.
-function remaining(m, t) {
-  const done = Math.min(1, Math.max(0, (t - m.start) / Math.max(0.01, m.end - m.start))) * A.pathLength(m.from, m.path);
-  let walked = 0;
-  let prev = m.from;
-  const out = [];
-  for (const p of m.path) {
-    walked += A.dist(prev, p);
-    prev = p;
-    if (walked > done + 1e-6 || out.length) out.push(p);
-  }
-  return out.length ? out : [m.path[m.path.length - 1]];
-}
-
 // Place an HTML element at a point on the arena.
 const pctOf = (game, p) => ({ left: `${(p.x / game.arena.width) * 100}%`, top: `${(p.y / game.arena.height) * 100}%` });
 function place(el, game, p) {
   Object.assign(el.style, pctOf(game, p));
 }
 
-// The corners of move m passed between times t0 and t1, in order.
-function cornersBetween(m, t0, t1) {
-  const len = A.pathLength(m.from, m.path);
-  const at = (t) => Math.min(1, Math.max(0, (t - m.start) / Math.max(0.01, m.end - m.start))) * len;
-  const s0 = at(t0);
-  const s1 = at(t1);
-  const out = [];
-  let walked = 0;
-  let prev = m.from;
-  for (const p of m.path) {
-    walked += A.dist(prev, p);
-    prev = p;
-    if (walked > s0 + 1e-6 && walked <= s1 + 1e-6) out.push(p);
-  }
-  return out;
-}
-
-// Move a fighter's token to where they are now, sliding along the route they walked since the
-// last update: through each corner of any move in progress or finished in between.
+// Move a fighter's token to where they are now, sliding along the route they were on at the
+// last update (through its corners) when that's where they went.
 function glide(el, game, f, now) {
   const key = `${f.index}`;
   const last = trail.get(key);
-  const moves = (last && last.game === game ? last.moves : []).filter((m) => m.end > (last ? last.time : 0));
-  if (f.moving && !moves.some((m) => m.start === f.moving.start && m.end === f.moving.end)) moves.push(f.moving);
-  trail.set(key, { game, time: game.time, p: now, moves });
+  const ahead = f.walk || f.flight ? game.routeAhead(f, game.time + 10) : null;
+  trail.set(key, { game, time: game.time, p: now, ahead });
   place(el, game, now);
   if (!last || last.game !== game || game.time < last.time || reduceMotion) return;
 
@@ -122,8 +90,14 @@ function glide(el, game, f, now) {
     start = { x: ((r.left - box.left) / box.width) * game.arena.width, y: ((r.top - box.top) / box.height) * game.arena.height };
     el.glide.cancel();
   }
+  // The points of the old route up to the one nearest where they are now, if they kept to it.
   const pts = [start];
-  for (const m of moves.sort((a, b) => a.start - b.start)) pts.push(...cornersBetween(m, last.time, game.time));
+  if (last.ahead) {
+    const path = last.ahead.path;
+    let near = -1;
+    path.forEach((p, i) => { if (A.dist(p, now) < 1 && (near < 0 || A.dist(p, now) <= A.dist(path[near], now))) near = i; });
+    if (near >= 0) pts.push(...path.slice(0, near));
+  }
   pts.push(now);
   const route = pts.filter((p, i) => i === 0 || A.dist(p, pts[i - 1]) > 0.01);
   if (route.length < 2) return;
@@ -169,8 +143,10 @@ function build(root, game) {
     if (view.picking == null) return;
     if (view.reach) {
       const t = snapTarget(toPoint(arena, e));
-      if (t && t.ok && view.onTarget) view.onTarget(view.reach.key, t.id);
-      return;
+      if (t) {
+        if (t.ok && view.onTarget) view.onTarget(view.reach.key, t.id);
+        return;
+      }
     }
     if (view.onPick) view.onPick(A.pointText(toPoint(arena, e)));
   });
@@ -207,8 +183,9 @@ function drawHover(arena) {
   }
 }
 
-// While picking a destination: the route to the spot under the mouse, how long it takes, and the range then.
-// While a targeted attack is open: which target the mouse is on, and whether it's in reach.
+// Walking: the route to the spot under the mouse. Launch: the flight there.
+// While a targeted attack is open: which target the mouse is on, and whether it's in reach
+// (away from any target, walking as usual).
 function drawHoverAt(arena) {
   const layer = arena.querySelector('.hover');
   const tip = arena.querySelector('.arena-tip');
@@ -221,9 +198,8 @@ function drawHoverAt(arena) {
   place(tip, game, view.hoverAt);
   tip.classList.toggle('flip', view.hoverAt.x > game.arena.width * 0.6);
   tip.hidden = false;
-  if (view.reach) {
-    const t = snapTarget(view.hoverAt);
-    if (!t) { tip.hidden = true; return; }
+  const t = view.reach ? snapTarget(view.hoverAt) : null;
+  if (t) {
     layer.appendChild(svg('circle', { class: `snap${t.ok ? '' : ' bad'}`, cx: t.at.x, cy: t.at.y, r: 1.1 }));
     tip.classList.toggle('bad', !t.ok);
     tip.textContent = t.ok ? `${t.label}${t.chance != null ? ` · ${Math.round(t.chance * 100)}% to hit` : ''} · click to target` : `${t.label}: ${t.why}`;
@@ -263,11 +239,11 @@ function drawHoverAt(arena) {
     layer.appendChild(svg('circle', { class: 'spot bad', cx: view.hoverAt.x, cy: view.hoverAt.y, r: 0.35 }));
     return;
   }
-  const w = view.flight ? view.flight.travel : moveTime(plan.length, game.speed(f));
-  const o = game.opponent(f);
-  const gap = A.dist(plan.dest, game.pos(o, game.time + w));
   tip.classList.remove('bad');
-  tip.textContent = `${fmt(plan.length)} m · ${fmt(w)} ticks · ${RANGES[A.bandOf(gap)]} (${fmt(gap)} m)`;
+  if (view.flight) {
+    const gap = A.dist(plan.dest, game.pos(game.opponent(f), game.time + view.flight.travel));
+    tip.textContent = `${fmt(plan.length)} m · lands in ${fmt(view.flight.travel)} · ${RANGES[A.bandOf(gap)]} (${fmt(gap)} m)`;
+  } else tip.textContent = `${fmt(plan.length)} m · click to walk here`;
   const g = svg('g', { class: `theme-${f.theme}` });
   hoverValue = A.pointText(view.hoverAt);
   g.appendChild(svg('polyline', { class: 'route hover-route', points: points(plan.from, plan.path) }));
@@ -324,14 +300,16 @@ export function renderField(game, opts = {}) {
   place(label, game, { x: (pos[0].x + pos[1].x) / 2, y: (pos[0].y + pos[1].y) / 2 });
   label.textContent = `${fmt(sight.dist)} m`;
 
-  // Moves in progress: the rest of the route, to where they'll arrive.
-  arena.querySelector('.routes').replaceChildren(...game.fighters.filter((f) => f.moving).map((f) => {
-    const m = f.moving;
+  // Courses: where each walker (or flight) goes over the next few ticks, as things stand.
+  arena.querySelector('.routes').replaceChildren(...game.fighters.filter((f) => f.walk || f.flight).map((f) => {
+    const arr = f.flight ? f.flight.end : game.arrival(f, 6);
+    const r = game.routeAhead(f, arr ?? game.time + 6);
     const g = svg('g', { class: `theme-${f.theme}` });
-    g.appendChild(svg('polyline', { class: 'route', points: points(pos[f.index], remaining(m, game.time)) }));
-    const end = m.path[m.path.length - 1];
+    if (!r) return g;
+    g.appendChild(svg('polyline', { class: 'route', points: points(r.from, r.path) }));
+    const end = r.path[r.path.length - 1];
     g.appendChild(svg('circle', { class: 'spot', cx: end.x, cy: end.y, r: 0.35 }));
-    g.appendChild(svg('title')).textContent = `${f.name} arrives t=${fmt(m.end)}`;
+    g.appendChild(svg('title')).textContent = `${f.name}: ${f.flight ? 'flying' : `walking ${game.walkText(f)}`}${arr != null ? `, arrives t=${fmt(arr)}` : ''}`;
     return g;
   }));
 
@@ -380,7 +358,7 @@ export function renderField(game, opts = {}) {
     glide(el, game, f, pos[f.index]);
     // Labels go on the side away from the opponent, so the two don't overlap.
     el.classList.toggle('right', pos[f.index].x > pos[1 - f.index].x);
-    el.classList.toggle('moving', !!f.moving);
+    el.classList.toggle('moving', !!(f.walk || f.flight));
     el.classList.toggle('acting', acting === f && !!game.prompt && game.prompt.kind !== 'over');
     const stances = game.activeStances(f);
     el.querySelector('.fbody').classList.toggle('has-stance', stances.length > 0);

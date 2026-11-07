@@ -11,7 +11,7 @@ let game;
 // UI state: slider amounts and targets per option, the selected menu row, the reaction being
 // built (dodge toggle and block amount), which fighter-panel tab is open, and what's hovered.
 const ui = {
-  amount: {}, target: {}, selected: null, desc: new Set(),
+  amount: {}, target: {}, selected: null, desc: new Set(), walk: 'keep',
   dodge: false, block: 0, hover: null, tabs: [null, null],
   picks: loadPicks(), queueAll: loadQueueMode(),
 };
@@ -52,6 +52,7 @@ function resetView() {
   ui.amount = {};
   ui.target = {};
   ui.selected = null;
+  ui.walk = 'keep';
   ui.dodge = false;
   ui.block = 0;
   ui.hover = null;
@@ -144,9 +145,16 @@ function fighterChips(f) {
       + `<span class="r">${verb} ${inTicks(w.end)}</span><span class="prog" style="width:${progress(w) * 100}%"></span>`
       + `${detail ? `<span class="chip-detail">${detail}</span>` : ''}</span>`);
   }
-  if (f.moving) {
-    chips.push(`<span class="chip windup move"><span class="ic">➜</span>Moving<span class="r">arrives ${inTicks(f.moving.end)}</span>`
-      + `<span class="prog" style="width:${progress(f.moving) * 100}%"></span></span>`);
+  if (f.flight) {
+    chips.push(`<span class="chip windup move"><span class="ic">⤴</span>Flying<span class="r">lands ${inTicks(f.flight.end)}</span>`
+      + `<span class="prog" style="width:${progress(f.flight) * 100}%"></span></span>`);
+  } else if (f.walk) {
+    const arr = f.walk.to ? game.arrival(f, 20) : null;
+    chips.push(`<span class="chip windup move" title="Walking pace now: ${game.paceText(game.paceAt(f, game.time))}"><span class="ic">➜</span>Walking ${game.walkText(f)}`
+      + `<span class="r">${arr != null ? `arrives ${inTicks(arr)}` : `${game.paceText(game.paceAt(f, game.time))} pace`}</span></span>`);
+  }
+  if (f.pending) {
+    chips.push(`<span class="chip windup"><span class="ic">✊</span>Closing in to strike<span class="r">gives up ${inTicks(f.pending.giveUp)}</span></span>`);
   }
   return chips.length ? chips.join('') : '<span class="empty">Nothing up or winding up</span>';
 }
@@ -277,9 +285,13 @@ function amountFor(o) {
 }
 
 function targetFor(o) {
+  if (o.key === 'move') return '';
   if (o.targets && !o.targets.some((t) => t.id === ui.target[o.key])) ui.target[o.key] = '';
   return ui.target[o.key] || '';
 }
+
+// Where to walk alongside this decision: "keep" until the person picks something.
+const walkChoice = () => ui.walk || 'keep';
 
 const VERB = { attack: 'lands', stance: 'up', construct: 'forms', move: 'arrives' };
 
@@ -287,13 +299,13 @@ const VERB = { attack: 'lands', stance: 'up', construct: 'forms', move: 'arrives
 function gistFor(f, o) {
   const amount = amountFor(o);
   const target = targetFor(o);
-  const pv = game.preview(f, o.key, amount, target);
+  const pv = game.preview(f, o.key, amount, target, walkChoice());
   if (o.group === 'drop') return { text: `raise again after ${fmt(game.reraiseDelay(f))}`, cost: 'free', pv };
-  if ((o.key === 'move' || o.point) && !target && !pv.enabled) {
-    return { text: o.point && o.point.line ? 'pick its direction on the field' : o.point && o.point.area ? 'pick its centre on the field' : 'click the field · Toward · Away', cost: '', pv, pick: true };
+  if (((o.key === 'move' && !f.walk && walkChoice() === 'keep') || (o.point && o.key !== 'move' && !target)) && !pv.enabled) {
+    return { text: o.point && o.point.line ? 'pick its direction on the field' : o.point && o.point.area ? 'pick its centre on the field' : 'pick where to walk: click the field · Toward · Away', cost: '', pv, pick: true };
   }
   if (!pv.enabled) return { text: pv.reason, cost: '', pv, warn: true };
-  const pj = game.project(f, o.key, amount, target);
+  const pj = game.project(f, o.key, amount, target, walkChoice());
   const bits = [];
   if (pj) {
     const opp = game.opponent(f);
@@ -330,8 +342,22 @@ function optionInputs(f, o) {
     html += `<label class="slider">Target <select data-target="${o.key}">${o.targets.map((t) =>
       `<option value="${t.id}" ${t.id === cur ? 'selected' : ''}>${t.label}</option>`).join('')}</select></label>`;
   }
-  if (o.point) html += pointPicker(f, o);
+  if (o.point && o.key !== 'move') html += pointPicker(f, o);
   return html;
+}
+
+// Where to walk alongside the decision: keep your course, toward or away from the opponent,
+// stop, or a spot clicked on the field.
+function walkBar(f, note = '') {
+  const w = walkChoice();
+  const p = parsePoint(w);
+  const them = game.opponent(f).name;
+  const now = f.walk ? `walking ${game.walkText(f)}` : 'standing';
+  const shown = w === 'keep' ? `keep ${now}` : p ? `to (${fmt(p.x)}, ${fmt(p.y)})` : w === 'toward' ? `toward ${them}` : w === 'away' ? `away from ${them}` : 'stop';
+  const btn = (v, label) => `<button class="ghost${w === v ? ' on' : ''}" data-walk="${v}">${label}</button>`;
+  return `<div class="walk-bar"><span class="label">Walk</span><b>${shown}</b>${note ? ` <span class="muted">${note}</span>` : ''}
+    <span class="walk-btns">${btn('keep', 'Keep')}${btn('toward', `Toward ${them}`)}${btn('away', 'Away')}${f.walk ? btn('stop', 'Stop') : ''}</span>
+    <span class="muted">or click the field</span></div>`;
 }
 
 // Moves and Launch: where to. Click the field, or head straight toward or away from the opponent.
@@ -374,7 +400,7 @@ function menuRow(f, o) {
       <span class="cost">${g.cost}</span></div>`;
   if (!sel) return `<div class="mitem" data-card="${o.key}">${head}</div>`;
   const desc = optionDesc(f, o);
-  const label = o.group === 'drop' ? 'Drop' : o.key === 'move' ? 'Go' : o.key === 'wait' ? 'Wait' : `Use ${o.card ? o.label : o.label}`;
+  const label = o.group === 'drop' ? 'Drop' : o.key === 'move' ? 'Walk' : o.key === 'wait' ? 'Wait' : `Use ${o.card ? o.label : o.label}`;
   return `<div class="mitem open" data-card="${o.key}">${head}
     <div class="detail">
       ${optionInputs(f, o)}
@@ -394,6 +420,7 @@ function renderTurn(f) {
   };
   return `
     <div class="phead theme-${f.theme}"><span class="prompt-title">${f.name}'s turn</span><span class="muted">Hover to preview on the board · click to choose</span></div>
+    ${walkBar(f)}
     <div class="menu">
       ${group('path', shortPath(game.path(f).name))}
       ${group('drop', 'Stances up')}
@@ -415,7 +442,7 @@ function reactionModel() {
   const canDodge = kind !== 'pulse' && kind !== 'construct' && ro.dodge.available;
   const canBlock = kind !== 'disrupt' && ro.block.maxBase >= 1;
   const choiceOf = (dodge, m) => (dodge && canDodge ? (m > 0 ? 'dodgeBlock' : 'dodge') : m > 0 ? 'block' : 'take');
-  const outcome = (dodge, m) => { const c = choiceOf(dodge, m); return { choice: c, block: m, dodge: dodge && canDodge, ...game.reactionOutcome(c, m) }; };
+  const outcome = (dodge, m) => { const c = choiceOf(dodge, m); return { choice: c, block: m, dodge: dodge && canDodge, ...game.reactionOutcome(c, m, walkChoice()) }; };
   const nothing = (o) => (kind === 'pulse' ? !o.pulse.targets.length : kind === 'disrupt' ? false : o.total === 0);
 
   // The smallest block that stops it all (or the most you can channel, if nothing does).
@@ -494,6 +521,8 @@ function reactionModel() {
     else if (o.interrupts && defWindups.length) lines.push(`<span class="bad">Over your threshold (${fmt(game.threshold(def))}): breaks your wind-ups</span>`);
     else if (defWindups.length) lines.push(`<span class="ok">Under your threshold (${fmt(game.threshold(def))}): ${defWindups.map((w) => w.label).join(', ')} still lands</span>`);
   }
+  if (o.courseText) lines.push(`Changes course: ${o.courseText === 'stop' ? 'stops walking' : `walks ${o.courseText}`}`);
+  else if (o.courseError) lines.push(`<span class="bad">${o.courseError}</span>`);
   const after = def.nextTurn + (o.delay || 0);
   lines.push(o.madraCost || o.delay
     ? `Costs ${[o.madraCost ? `${fmt(o.madraCost)} madra` : '', o.delay ? `next turn ${inTicks(after)} instead of ${inTicks(def.nextTurn)}` : ''].filter(Boolean).join(' · ')}`
@@ -540,6 +569,7 @@ function renderReaction(m) {
       ${m.canBlock ? `<div class="ctrl${m.current.block > 0 ? ' on' : ''}"><div class="ch">${m.kind === 'construct' ? 'Reinforce' : 'Block'}<span class="r">${m.blockText}</span></div>
         <label class="slider">Madra <input type="range" min="0" max="${m.maxBlock}" value="${m.current.block}" data-block><b data-block-val>${m.current.block}</b></label></div>` : ''}
     </div>` : ''}
+    ${walkBar(m.def, `changing it costs +${fmt(game.courseDelay(m.def))} ticks`)}
     <div class="outcome" data-react-card="${m.current.choice}">
       <span class="big">${m.current.big}</span>
       <div class="lines">${m.current.lines.map((l) => `<span>${l}</span>`).join('')}</div>
@@ -562,6 +592,21 @@ function renderOpportunity(f) {
       <button class="primary" data-opp="strike">Strike as they go</button>
     </div>
     <div class="alt"><span class="nm">Let them go</span><span>No cost</span><button data-opp="let">Let them go</button></div>`;
+}
+
+// The opponent has just taken a turn: keep your course or change it.
+function renderCourse(f) {
+  const after = game.fighters[game.prompt.after];
+  const w = walkChoice();
+  const pv = game.coursePreview(w);
+  const did = game.log.filter((l) => l.who === after.index && Math.abs(l.time - game.time) < 1e-9).map((l) => l.text).join(' ');
+  return `
+    <div class="phead theme-${f.theme}"><span class="prompt-title">${f.name}: change course?</span><span class="muted">${after.name} has just acted</span></div>
+    <div class="incoming theme-${after.theme}"><div class="what">${relTimes(did || `${after.name} acts.`)}</div></div>
+    ${walkBar(f)}
+    <div class="card-preview">${previewHtml(pv)}</div>
+    <div class="detail-actions"><button class="primary" data-course="keep">Keep going</button>
+      <button data-course="change" ${w !== 'keep' && pv.enabled ? '' : 'disabled'}>Change course${pv.delay ? ` · +${fmt(pv.delay)} ticks` : ''}</button></div>`;
 }
 
 // ---------- prompt ----------
@@ -588,6 +633,7 @@ function renderPrompt() {
   if (p.kind === 'turn') el.innerHTML = renderTurn(f);
   else if (p.kind === 'reaction') el.innerHTML = renderReaction(reactionModel());
   else if (p.kind === 'opportunity') el.innerHTML = renderOpportunity(f);
+  else if (p.kind === 'course') el.innerHTML = renderCourse(f);
 }
 
 // ---------- stale-code check ----------
@@ -637,7 +683,7 @@ function timelineItems(ghost) {
     for (const w of f.windups) {
       items.push({ key: `w:${w.eventId}`, who: f.index, kind: 'bar', start: w.start, end: w.end, label: `${w.label}${w.madra && !w.label.includes(`(${w.madra})`) ? ` · ${w.madra}` : ''}`, ev: w.eventId });
     }
-    if (f.moving) items.push({ key: `mv:${f.index}:${f.moving.start}`, who: f.index, kind: 'bar', move: true, start: f.moving.start, end: f.moving.end, label: 'moving' });
+    if (f.flight) items.push({ key: `fl:${f.index}:${f.flight.start}`, who: f.index, kind: 'bar', move: true, start: f.flight.start, end: f.flight.end, label: 'flying' });
   }
   for (const i of game.upcoming()) {
     const ev = i.key.startsWith('ev:') ? Number(i.key.slice(3)) : null;
@@ -782,28 +828,33 @@ function currentGhost() {
   const p = game.prompt;
   if (ui.hoverEv != null && !(ui.hover && (ui.hover.key || ui.hover.react))) return game.projectEvent(ui.hoverEv);
   if (!p || claudeToAct(game)) return null;
+  // The mouse on the field previews walking there (or, for an open aimed row, aiming there).
+  const walkHover = ui.fieldHover && !ui.fieldHover.key && !(ui.hover && ui.hover.key) ? ui.fieldHover.value : null;
+  const walk = walkHover || walkChoice();
   if (p.kind === 'reaction') {
     const hovered = ui.hover && ui.hover.react;
-    if (hovered === 'redirect') return game.projectReaction('redirect', 0);
+    if (hovered === 'redirect') return game.projectReaction('redirect', 0, walk);
     const m = reactionModel();
-    return game.projectReaction(m.current.choice, m.current.block);
+    return game.projectReaction(m.current.choice, m.current.block, walk);
   }
+  if (p.kind === 'course') return game.projectCourse(walk);
   if (p.kind !== 'turn') return null;
-  // The mouse on the field previews the open action there: a move to that spot, an area aimed
-  // there, or an attack on that target.
-  if (ui.fieldHover && !(ui.hover && ui.hover.key)) {
+  const f = game.current();
+  if (ui.fieldHover && ui.fieldHover.key && !(ui.hover && ui.hover.key)) {
     const k = ui.fieldHover.key;
-    return game.project(game.current(), k, ui.amount[k] || 0, ui.fieldHover.value);
+    return game.project(f, k, ui.amount[k] || 0, ui.fieldHover.value, walkChoice());
   }
-  const k = (ui.hover && ui.hover.key) || ui.selected;
-  if (!k) return null;
-  return game.project(game.current(), k, ui.amount[k] || 0, ui.target[k] || '');
+  const k = (ui.hover && ui.hover.key) || ui.selected || (walkHover ? 'move' : null);
+  if (!k) return walkChoice() !== 'keep' ? game.project(f, 'move', 0, '', walkChoice()) : null;
+  return game.project(f, k, ui.amount[k] || 0, k === 'move' ? '' : ui.target[k] || '', walk);
 }
 
 // The field reports what the mouse is on; preview it on the bars and the timeline (not the
 // field itself, which draws its own hover).
 function onFieldHover(value) {
-  ui.fieldHover = value == null || !ui.fieldKey ? null : { key: ui.fieldKey, value };
+  // With a targeted attack open, a spot away from any target is a walk there.
+  const walking = ui.fieldReach && parsePoint(value || '');
+  ui.fieldHover = value == null ? null : { key: walking ? null : ui.fieldKey, value };
   const ghost = currentGhost();
   game.fighters.forEach((f) => renderFighter(f, ghost));
   renderQueue(ghost);
@@ -813,33 +864,31 @@ function onFieldHover(value) {
 // hovered or selected row's, or else the move already chosen.
 function fieldOpts(ghost) {
   const p = game.prompt;
-  const human = !!p && p.kind === 'turn' && !claudeToAct(game);
-  let plan = ghost && ghost.path ? ghost.path : null;
-  if (!plan && human && ui.target.move) {
-    const f = game.current();
-    const mv = game.planMove(f, ui.target.move);
-    if (!mv.error) plan = { who: f.index, from: mv.from, path: mv.path };
-  }
+  const human = !!p && ['turn', 'reaction', 'course'].includes(p.kind) && !claudeToAct(game);
+  const plan = ghost && ghost.path ? ghost.path : null;
   // What the field does depends on the open row (hovered, or else selected):
-  //   move or Launch: hovering shows the route and a click picks the destination;
+  //   Launch: hovering shows the flight and a click picks where it lands;
   //   an area set at a point, or a line: hovering shows its shape and a click aims it;
-  //   a targeted attack: its reach, with targets marked in or out, and a click picks the target;
-  //   anything else: no picking. With no row open, a click on the field starts a move.
-  const f = human ? game.current() : null;
-  const key = human ? (ui.hover && ui.hover.key) || ui.selected : null;
-  const opt = key ? game.turnOptions(f).find((o) => o.key === key) : null;
+  //   a targeted attack: its reach, with targets marked in or out; a click on a target picks it;
+  //   anything else (and any other click): hovering shows a walk there, and a click picks it.
   const out = { picking: null, plan, onPick: pickPoint, onTarget: pickTarget, onHover: onFieldHover, area: ghost && ghost.area ? ghost.area : null, aiming: null, reach: null, flight: null };
   ui.fieldKey = null;
+  ui.fieldReach = false;
   if (!human) return out;
-  ui.fieldKey = opt ? key : 'move';
-  if (!opt) return { ...out, picking: p.fighter };
-  if (opt.point && opt.point.area) return { ...out, picking: p.fighter, aiming: { key, amount: ui.amount[key] || 0 } };
+  if (p.kind !== 'turn') return { ...out, picking: p.fighter };
+  const f = game.current();
+  const key = (ui.hover && ui.hover.key) || ui.selected;
+  const opt = key ? game.turnOptions(f).find((o) => o.key === key) : null;
+  if (!opt || opt.key === 'move') return { ...out, picking: p.fighter };
+  if (opt.point && opt.point.area) { ui.fieldKey = key; return { ...out, picking: p.fighter, aiming: { key, amount: ui.amount[key] || 0 } }; }
   if (opt.point) {
     const t = game.tech(f, key);
+    ui.fieldKey = key;
     return { ...out, picking: p.fighter, flight: t && t.kind === 'launch' ? { reach: game.launchReach(t), flight: true, travel: t.travel } : null };
   }
   const reach = reachFor(f, opt);
-  return reach ? { ...out, picking: p.fighter, reach, plan: null } : { ...out, plan: null };
+  if (reach) { ui.fieldKey = key; ui.fieldReach = true; }
+  return reach ? { ...out, picking: p.fighter, reach } : { ...out, picking: p.fighter };
 }
 
 // A targeted option's reach and the targets it could pick, for the field.
@@ -878,16 +927,16 @@ function pickTarget(key, id) {
   renderGhost();
 }
 
-// A destination clicked on the field goes to the selected (or last touched) point option, or
-// to every move-like option if none is.
+// A spot clicked on the field aims the open aimed row (Launch, an area set at a point, a line);
+// otherwise it's where to walk.
 function pickPoint(pt) {
-  const f = game.current();
-  if (!f) return;
-  const opts = game.turnOptions(f).filter((o) => o.point);
-  const chosen = opts.find((o) => o.key === ui.selected) || opts.find((o) => o.key === ui.pointCard);
-  if (chosen) ui.target[chosen.key] = pt;
-  else for (const o of opts) ui.target[o.key] = pt;
-  if (!chosen) ui.selected = 'move';
+  const p = game.prompt;
+  if (!p) return;
+  const f = game.fighters[p.fighter];
+  const open = p.kind === 'turn' && ui.selected && ui.selected !== 'move'
+    ? game.turnOptions(f).find((o) => o.key === ui.selected && o.point) : null;
+  if (open) ui.target[open.key] = pt;
+  else ui.walk = pt;
   renderPrompt();
   renderGhost();
 }
@@ -943,6 +992,7 @@ function resumeOrStart() {
 function afterChoice() {
   // Destinations are for this turn only.
   for (const k of Object.keys(ui.target)) if (isPointTarget(ui.target[k])) delete ui.target[k];
+  ui.walk = 'keep';
   ui.selected = null;
   ui.dodge = false;
   ui.block = 0;
@@ -953,14 +1003,26 @@ document.addEventListener('click', (e) => {
   const act = e.target.closest('[data-act]');
   if (act && !act.disabled) {
     const key = act.dataset.act;
-    game.act(key, ui.amount[key] || 0, ui.target[key] || '');
+    game.act(key, ui.amount[key] || 0, key === 'move' ? '' : ui.target[key] || '', walkChoice());
+    afterChoice();
+    return;
+  }
+  const walk = e.target.closest('[data-walk]');
+  if (walk) {
+    ui.walk = walk.dataset.walk;
+    renderPrompt();
+    renderGhost();
+    return;
+  }
+  const course = e.target.closest('[data-course]');
+  if (course && !course.disabled) {
+    game.course(course.dataset.course === 'keep' ? 'keep' : walkChoice());
     afterChoice();
     return;
   }
   const point = e.target.closest('[data-point]');
   if (point) {
     ui.target[point.dataset.point] = point.dataset.way;
-    ui.pointCard = point.dataset.point;
     renderPrompt();
     renderGhost();
     return;
@@ -976,7 +1038,6 @@ document.addEventListener('click', (e) => {
   if (sel) {
     const k = sel.dataset.select;
     ui.selected = ui.selected === k ? null : k;
-    if (game.turnOptions(game.current()).some((o) => o.key === k && o.point)) ui.pointCard = k;
     renderPrompt();
     renderGhost();
     return;
@@ -989,7 +1050,7 @@ document.addEventListener('click', (e) => {
   }
   const react = e.target.closest('[data-react]');
   if (react && !react.disabled) {
-    game.react(react.dataset.react, ui.block);
+    game.react(react.dataset.react, ui.block, walkChoice());
     afterChoice();
     return;
   }
@@ -1099,12 +1160,6 @@ document.addEventListener('mouseover', (e) => {
 
 document.addEventListener('mouseover', (e) => {
   const card = e.target.closest('[data-card], [data-react-card]');
-  // Remember which row with a field pick (move, Launch, an area set at a point) was touched last,
-  // so the field shows that kind of pick.
-  if (card && card.dataset.card && game.prompt && game.prompt.kind === 'turn') {
-    const o = game.turnOptions(game.current()).find((x) => x.key === card.dataset.card);
-    if (o && o.point && ui.pointCard !== o.key) { ui.pointCard = o.key; renderGhost(); }
-  }
   const disabled = card && card.querySelector('.mrow.dis');
   const next = !card || disabled ? null
     : card.dataset.card ? { key: card.dataset.card } : { react: card.dataset.reactCard };

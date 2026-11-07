@@ -71,9 +71,15 @@ def fighter_line(f):
         lines.append(f"    zone: {z['name']}, {where}, until t={z['until']}" + (f", slows {round(z['slow'] * 100)}% inside" if z.get("slow") else ""))
     if f.get("at"):
         lines.append(f"    at ({f['at']['x']}, {f['at']['y']})")
-    if f["moving"]:
-        to = f["moving"].get("to") or {}
-        lines.append(f"    moving to ({to.get('x')}, {to.get('y')}), arrives t={f['moving']['arrives']}")
+    w = f.get("walk")
+    if w:
+        arr = f", arrives t={w['arrives']}" if w.get("arrives") not in (None, -1) else ""
+        lines.append(f"    walking {w['course']} at {w['pace']} pace{arr}")
+    if f.get("flight"):
+        to = f["flight"]["to"]
+        lines.append(f"    flying to ({to['x']}, {to['y']}), lands t={f['flight']['lands']}")
+    if f.get("closingIn"):
+        lines.append(f"    closing in to strike: it starts once it would land in reach (gives up t={f['closingIn']['givesUp']})")
     return "\n".join(lines)
 
 
@@ -159,6 +165,14 @@ def describe(s, served_version=None):
         rd = r.get("redirect") or {}
         if rd.get("shown"):
             out.append(f"  redirect: throw it back for {rd['cost']} madra" + ("" if rd.get("available") else " (not enough madra)"))
+    if s.get("course"):
+        c = s["course"]
+        out.append(f"{c['after']} has just acted: {' '.join(c['did']) or '(see the log)'}")
+        out.append(f"You can change course (you're {c['now']}): changing it pushes your next turn {c['delay']} later. Answer with key keep, or key course and a walk.")
+        for way, w in c["ways"].items():
+            status = "" if w["enabled"] else f" (unavailable: {w['reason']})"
+            out.append(f"  {way}{status}: " + " / ".join(w["preview"]))
+        out.append('  or any spot as walk "x:y"')
     if s.get("opportunity"):
         op = s["opportunity"]
         st = op["strike"]
@@ -173,12 +187,14 @@ def describe(s, served_version=None):
 
 INSTRUCTIONS = """You are playing Cradle Duel, a dueling game set in Will Wight's Cradle, against a human. You control one fighter; play to win.
 
-Each time your fighter has a decision, you get the board as text: both fighters, the shared initiative queue, the recent log, and and what you're deciding: your options (on your turn), an incoming attack (a reaction), or a chance to strike an opponent leaving Close range. The numbers on the board and in each option's preview come from the game itself; trust them over anything in the design docs below. The docs explain the rules and the thinking behind them.
+Each time your fighter has a decision, you get the board as text: both fighters, the shared initiative queue, the recent log, and what you're deciding: your options (on your turn), an incoming attack (a reaction), a chance to change course after the opponent acts, or a chance to strike an opponent leaving Close range. The numbers on the board and in each option's preview come from the game itself; trust them over anything in the design docs below. The docs explain the rules and the thinking behind them.
 
-Answer every decision by calling make_move once. Each action has a key, an amount and a target:
+Answer every decision by calling make_move once. Each action has a key, an amount, a target and a walk:
 - On your turn, the key is an option key from the Options list. amount is the slider value (e.g. madra to commit) when the option has a slider, else 0.
 - target is for options that need one, and is what follows "@" on the board without the "@": a construct id ("c12"), a spot on the arena as "x:y" in metres ("12.5:8"), "toward" / "away" for moves, or "them" to aim an area at the opponent (a circle's centre, or a beam's direction). Leave it "" when there's nothing to aim.
-- In a reaction, the key is take, dodge, block (amount N), dodgeBlock (amount N), or redirect when it's shown.
+- walk is where to walk alongside the action, since walking goes on while you do anything else: "keep" (your current course), "stop", "toward" (follow the opponent, stopping 1.5 m away), "away", or a spot "x:y". Each option's preview assumes "keep". For the move option, the destination can go in target or walk. A strike chosen out of reach follows the opponent and starts once it would land in reach.
+- In a reaction, the key is take, dodge, block (amount N), dodgeBlock (amount N), or redirect when it's shown; walk can change course at the same time (it pushes your next turn later).
+- When the opponent has just acted, you may change course: key "keep", or key "course" with the new walk.
 - When the opponent walks out of Close range, you get the chance to strike as they go: the key is strike or let.
 - You can send several actions in order, e.g. dropping a stance ("drop:burningCloak") and then striking.
 - offerDraw or withdrawDraw can go alongside any move. A draw happens only when both sides offer.
@@ -204,11 +220,12 @@ MOVE_TOOL = {
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["key", "amount", "target"],
+                    "required": ["key", "amount", "target", "walk"],
                     "properties": {
-                        "key": {"type": "string", "description": "An option key, a reaction (take, dodge, block, dodgeBlock, redirect), strike or let, offerDraw or withdrawDraw."},
+                        "key": {"type": "string", "description": "An option key, a reaction (take, dodge, block, dodgeBlock, redirect), keep or course, strike or let, offerDraw or withdrawDraw."},
                         "amount": {"type": "number", "description": "Slider value or block size; 0 when there is none."},
                         "target": {"type": "string", "description": "Construct id, \"x:y\", toward, away, them, or \"\"."},
+                        "walk": {"type": "string", "description": "Where to walk alongside: keep, stop, toward, away, or \"x:y\"."},
                     },
                 },
             },
