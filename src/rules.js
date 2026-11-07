@@ -124,7 +124,8 @@ export const FALLOFF = 4;
 // Written either directly (reach, minReach, best) or as bands (ranges, bestRange): reaching Far
 // means no limit; best at Far means 20 m.
 export function rangeSpec(t) {
-  if (t.reachSpec) return t.reachSpec;
+  // A saved fight stores an unlimited reach as null (JSON has no Infinity).
+  if (t.reachSpec) return { ...t.reachSpec, max: t.reachSpec.max ?? Infinity };
   const ranges = t.ranges || [0];
   const top = Math.max(...ranges);
   const low = Math.min(...ranges);
