@@ -1,11 +1,9 @@
-// Fighters, Paths and traits from paths.md and traits.md.
-//
 // Technique kinds:
-//   attack    - a damaging technique (scales with madra unless noted)
+//   attack    - a damaging technique (scales with madra)
 //   stance    - held technique with upkeep
-//   construct - Forged object that persists on the field (scales with madra)
-//   disrupt   - breaks the target's wind-ups and stances (fixed cost)
-//   launch    - fast movement, one range band either way (fixed cost)
+//   construct - a Forged barrier (scales with madra); forge / command - Crown stars, forged then dropped; ring - a ring Forged on yourself
+//   disrupt   - breaks the target's wind-ups and stances (fixed cost); pulse - cancels what cost little (scales with madra)
+//   launch    - a straight flight (fixed cost)
 // Damage types (dtype): 'technique' (default), 'physical', 'spiritual'.
 
 export const BASE_STATS = {
@@ -14,10 +12,9 @@ export const BASE_STATS = {
   precision: 5, control: 5, perception: 5,
 };
 
-// One point-buy step of each stat (stats.md "Building a fighter").
+// One point-buy step of each stat.
 export const STAT_STEP = { health: 10, toughness: 1, speed: 5, pool: 15, cap: 2, spirit: 10, precision: 1, control: 1, perception: 1 };
 
-// A fighter's stats from their point-buy steps.
 export function statsFrom(steps = {}) {
   const stats = { ...BASE_STATS };
   for (const [k, step] of Object.entries(STAT_STEP)) stats[k] = BASE_STATS[k] + step * (steps[k] || 0);
@@ -257,5 +254,4 @@ export const FIGHTERS_RAW = [
   },
 ];
 
-// Canon fighters, with their stats worked out from their steps.
 export const FIGHTERS = FIGHTERS_RAW.map((f) => ({ ...f, stats: statsFrom(f.steps) }));

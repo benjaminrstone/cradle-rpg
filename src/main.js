@@ -97,8 +97,7 @@ const shortPath = (name) => name.replace(/^Path of (the )?/, '');
 // ---------- fighters ----------
 const clampPct = (v, max) => Math.max(0, Math.min(100, (v / max) * 100));
 
-// A bar with an optional hover ghost and threshold ticks. A tick sits where the bar would be after
-// one hit just big enough to break wind-ups (solid) or stances (dotted).
+// A tick sits where the bar would be after one hit just big enough to break wind-ups (solid) or stances (dotted).
 function bar(label, cls, value, max, delta = 0, ticks = []) {
   const now = Math.max(0, value);
   const after = Math.max(0, value + delta);
@@ -115,14 +114,12 @@ function bar(label, cls, value, max, delta = 0, ticks = []) {
 
 const progress = (w) => Math.min(1, Math.max(0, (game.time - w.start) / Math.max(0.01, w.end - w.start)));
 
-// What a wind-up does when it finishes: a stance comes up, a construct forms, anything else lands.
 function windupVerb(w) {
   const ev = game.events.find((e) => e.id === w.eventId);
   const k = ev ? ev.action.kind : '';
   return k === 'stance' ? 'up' : k === 'forged' || k === 'ring' || k === 'piece' ? 'forms' : 'lands';
 }
 
-// The live state as chips: stances up, constructs, wind-ups and a move in progress.
 function fighterChips(f) {
   const chips = [];
   for (const s of game.activeStances(f)) {
@@ -159,7 +156,6 @@ function fighterChips(f) {
   return chips.length ? chips.join('') : '<span class="empty">Nothing up or winding up</span>';
 }
 
-// Tabs behind the panel: Stats, Path, and Seen (what this fighter has shown so far).
 function fighterTab(f, tab) {
   const o = game.opponent(f);
   if (tab === 'stats') {
@@ -214,7 +210,7 @@ function renderFighter(f, ghost = null) {
   const path = game.path(f);
   const o = game.opponent(f);
 
-  // Next turn, relative to now. A tie goes to whoever is listed first.
+  // A tie goes to whoever is listed first.
   let turn;
   if (p && p.kind === 'turn' && p.fighter === f.index) turn = '<span class="turn now">Next turn <b>now</b></span>';
   else if (f.nextTurn - game.time < 0.05) turn = `<span class="turn now">Next turn <b>now</b>${p && p.fighter === o.index ? `, after ${o.name}` : ''}</span>`;
@@ -250,7 +246,6 @@ function renderFighter(f, ghost = null) {
     ${tab ? `<div class="fp-tab">${fighterTab(f, tab)}</div>` : ''}`;
 }
 
-// Draw offers: a toggle for each side you control; Claude's offer is shown as a label.
 function drawControl(f) {
   if (game.result) return '';
   const offering = game.drawOffers[f.index];
@@ -275,7 +270,6 @@ function iconFor(f, o) {
   return '↯';
 }
 
-// The amount an option's slider is at (clamped to what it allows now).
 function amountFor(o) {
   if (!o.slider) return 0;
   const s = o.slider;
@@ -289,12 +283,10 @@ function targetFor(o) {
   return ui.target[o.key] || '';
 }
 
-// Where to walk alongside this decision: "keep" until the person picks something.
 const walkChoice = () => ui.walk || 'keep';
 
 const VERB = { attack: 'lands', stance: 'up', construct: 'forms', move: 'arrives' };
 
-// A one-line gist for a menu row: when it lands, its main effect, and what it costs.
 function gistFor(f, o) {
   const amount = amountFor(o);
   const target = targetFor(o);
@@ -331,7 +323,6 @@ function gistFor(f, o) {
   return { text: bits.join(' · '), cost: madra, pv, warn: !!pv.warning, warning: pv.warning };
 }
 
-// Slider, target picker and field picker for an option.
 function optionInputs(f, o) {
   let html = '';
   if (o.slider) {
@@ -395,7 +386,6 @@ function marksHtml(marks, current, attr) {
     `<button class="mark${Math.abs(m.at - current) < 1e-6 ? ' on' : ''}" ${attr} data-at="${m.at}"><b>${fmt(m.at)}</b> ${m.label}</button>`).join('')}</div>`;
 }
 
-// The standing order to give alongside the decision.
 const HOLDS = [5, 10, 15, 20];
 function walkBar(f, note = '') {
   const w = walkChoice();
@@ -436,7 +426,6 @@ function optionDesc(f, o) {
   return [o.cardDesc, o.desc].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(' ');
 }
 
-// One row of the menu; the selected one opens with its controls, full preview and Use button.
 function menuRow(f, o) {
   const g = gistFor(f, o);
   const sel = ui.selected === o.key;
@@ -511,7 +500,6 @@ function reactionModel() {
   const rollOf = (o) => (prof.area || kind === 'pulse' || kind === 'disrupt' ? '' : o.chances && o.chances.length > 1 ? `${o.chances.map(pct).join(' / ')} · ` : `${pct(o.chance)} · `);
   const costOf = (o) => [o.madraCost ? `${fmt(o.madraCost)} madra` : '', o.delay ? `+${fmt(o.delay)} ticks` : ''].filter(Boolean).join(', ') || 'free';
 
-  // Would this outcome drop the defender's health or spirit to 0?
   const fatalOf = (o) => kind === 'attack' && o.total > 0 && (o.track === 'spirit' ? def.spirit : def.health) - o.total <= 0;
   // Block amounts worth stopping at, with the dodge as it's set.
   const marks = [];
@@ -531,7 +519,6 @@ function reactionModel() {
   if (canDodge) tiles.push({ name: 'Dodge', o: outcome(true, 0) });
   if (canBlock) tiles.push({ name: `${kind === 'construct' ? 'Reinforce' : 'Block'} ${blockAt}`, o: outcome(false, blockAt), note: zero == null ? 'most you can' : '' });
 
-  // Facts about what's coming.
   const facts = [];
   if (kind === 'pulse') facts.push(`<b>${prof.madra}</b> madra pulse`, `cancels what cost <b>${fmt(prof.madra / 2)}</b> or less`);
   else if (kind === 'disrupt') facts.push('breaks your wind-ups and stances if it hits');
@@ -546,7 +533,6 @@ function reactionModel() {
   if (prof.area) facts.push('area · <b>no roll</b>');
   if (prof.madra && kind === 'attack') facts.push(`${prof.madra} madra in it`);
 
-  // Controls: what the dodge and the block do, from the API.
   const st = ro.dodge.sidestep;
   const dodgeText = !canDodge ? '' : st
     ? `Sidestep ${fmt(st.metres)} m out from its centre: ${st.escapes ? '<b>gets you out</b>' : `still inside (you'd need ${fmt(st.needs)} m)`}`
@@ -554,7 +540,6 @@ function reactionModel() {
   const blockText = !canBlock ? '' : kind === 'pulse' ? `−${ro.block.soakPerMadra} strength per madra · up to ${ro.block.maxBase}`
     : `soaks ${ro.block.soakPerMadra} per madra${a.hits > 1 ? ', shared by the hits' : ''} · up to ${ro.block.maxBase}`;
 
-  // The outcome of the current choice.
   const o = current;
   const lines = [];
   let big;
@@ -645,7 +630,6 @@ function renderReaction(m) {
       <button data-react="${x.choice}" ${x.available ? '' : 'disabled'}>${x.name} · ${x.cost}</button></div>`).join('')}`;
 }
 
-// Someone is walking out of Close range: strike as they go, or let them leave.
 function renderOpportunity(f) {
   const op = game.opportunityOptions();
   const s = op.strike;
@@ -809,7 +793,6 @@ function renderQueue(ghost = null) {
       i.row = r;
     }
     syncLane(lane, mine, at, Math.max(1, rowEnds.length));
-    // Upkeep: a dashed madra line along the lane while any stance is held.
     const upkeep = game.activeStances(f).reduce((s, d) => s + game.upkeepRate(f, d), 0);
     let up = lane.querySelector('.upk');
     if (upkeep > 0) {
@@ -930,8 +913,6 @@ function onFieldHover(value) {
   renderQueue(ghost);
 }
 
-// What the field shows: on a person's turn, they can pick a destination; the route ghost is the
-// hovered or selected row's, or else the move already chosen.
 function fieldOpts(ghost) {
   const p = game.prompt;
   const human = !!p && ['turn', 'reaction', 'course'].includes(p.kind) && !claudeToAct(game);
@@ -961,7 +942,6 @@ function fieldOpts(ghost) {
   return reach ? { ...out, picking: p.fighter, reach } : { ...out, picking: p.fighter };
 }
 
-// A targeted option's reach and the targets it could pick, for the field.
 function reachFor(f, opt) {
   const t = opt.key === 'strike' ? null : game.tech(f, opt.key);
   const single = opt.key === 'strike' || (t && ((t.kind === 'attack' && !t.area) || t.kind === 'disrupt' || t.kind === 'pulse'));
@@ -986,7 +966,6 @@ function reachFor(f, opt) {
   return { key: opt.key, spec, targets };
 }
 
-// Clicking a target on the field while a targeted attack is open.
 function pickTarget(key, id) {
   const f = game.current();
   const opt = f && game.turnOptions(f).find((o) => o.key === key);

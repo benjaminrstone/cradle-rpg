@@ -7,7 +7,6 @@ const span = (min, max) => (min === max ? `${R[min]} range` : `${R[min]}–${R[m
 const rangeList = (min, max) => Array.from({ length: Math.max(0, max - min) + 1 }, (_, i) => min + i);
 const pct = (x) => `${Math.round(x * 100)}%`;
 
-// Knob helpers.
 const num = (key, label, min, max, step, def) => ({ key, label, type: 'number', min, max, step, def });
 const bool = (key, label, def = false) => ({ key, label, type: 'bool', def });
 const pick = (key, label, options, def) => ({ key, label, type: 'select', options, def });
@@ -207,7 +206,6 @@ export function applyCustomThemes() {
     .map((d) => `.theme-${themeKey(d.id)} { --accent: ${d.color}; --accent-dim: ${dimColor(d.color)}; }`).join(' ');
 }
 
-// ---------- storage ----------
 const KEY = 'customPaths';
 export function loadPathDrafts() {
   try {

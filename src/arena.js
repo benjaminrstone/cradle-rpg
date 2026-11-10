@@ -1,5 +1,4 @@
-// The battlefield: a walled arena with obstacles. Positions are free (x, y in metres, z for
-// height); range bands are distance rings; obstacles block movement and line of sight.
+// Positions are free (x, y in metres, z for height); obstacles block movement and line of sight.
 
 export const ARENA = {
   name: 'Courtyard',
@@ -14,17 +13,16 @@ export const ARENA = {
   ],
 };
 
-// Range words for distances: Close up to 2 m, Mid up to 10 m, Far beyond. Attacks reach and
-// lose accuracy by the metre (rules.js); the words are shorthand.
+// Close up to 2 m, Mid up to 10 m, Far beyond.
 export const BANDS = [2, 10];
 // The largest an area can grow, and the longest a line (a beam) can reach.
 export const AREA_MAX = 14;
 export const LINE_MAX = 24;
 // A fighter's size, for keeping clear of walls and obstacles.
 export const RADIUS = 0.5;
-// Crown stars hang this high over their owner: out of reach of anything short-ranged, and over every obstacle.
+// Crown stars hang this high over their owner.
 export const STAR_HEIGHT = 14;
-// Launch: the farthest a ring can fling you, enough to go from the start to Close or Far.
+// The farthest a Launch flings you.
 export const LAUNCH_REACH = 7;
 // Closing in stops this far from the opponent, well inside Close.
 export const TOWARD_GAP = 1.5;
@@ -95,7 +93,7 @@ export function segDist(a, b, p) {
   return { dist: Math.hypot(p.x - q.x, p.y - q.y), side: cross >= 0 ? 1 : -1, along: k };
 }
 
-// The obstacle in the way of a line from a to b, if any. Anything high overhead sees over them all.
+// Anything high overhead sees over every obstacle.
 export function blocker(arena, a, b) {
   if ((a.z || 0) > 0 || (b.z || 0) > 0) return null;
   return arena.obstacles.find((r) => crosses(a, b, r)) || null;
@@ -103,7 +101,6 @@ export function blocker(arena, a, b) {
 
 const insideRect = (p, r, pad) => p.x > r.x - pad + EPS && p.x < r.x + r.w + pad - EPS && p.y > r.y - pad + EPS && p.y < r.y + r.h + pad - EPS;
 
-// Can a fighter stand here: inside the arena walls and clear of every obstacle?
 export function standable(arena, p) {
   return p.x >= RADIUS - EPS && p.x <= arena.width - RADIUS + EPS && p.y >= RADIUS - EPS && p.y <= arena.height - RADIUS + EPS
     && !arena.obstacles.some((r) => insideRect(p, r, RADIUS));
@@ -158,7 +155,6 @@ export function pathLength(from, pts) {
   return len;
 }
 
-// The point s metres along the path from `from` through pts.
 export function along(from, pts, s) {
   let p = from;
   for (const q of pts) {
@@ -221,10 +217,9 @@ export function nearestStandable(arena, p) {
   return null;
 }
 
-// A spot toward or away from the opponent: toward stops TOWARD_GAP short of them (or at `reach`),
-// away goes straight back `reach` metres (AWAY_STEP if unlimited), kept inside the arena.
-// Backing away (and any flight) stops short of obstacles instead of going around them; walking
-// toward the opponent goes around whatever is between you.
+// A spot toward the opponent (stopping TOWARD_GAP short of them, or at `reach`) or straight away
+// from them (`reach` metres, AWAY_STEP if unlimited). Away, and any flight, stops short of
+// obstacles instead of going around them.
 export function spotFrom(arena, me, them, way, reach = Infinity, flight = false) {
   const d = dist(me, them);
   const ux = d > EPS ? (them.x - me.x) / d : 1;

@@ -1,7 +1,4 @@
-// Fight engine: one shared initiative queue, wind-ups, reactions, upkeep, interrupts,
-// Forged constructs, and three damage types (physical, technique, spiritual).
-// Defense comes in three kinds: take it (reduction, stances, barriers), dodge (time), block (madra).
-// Turn choices are worked out in plans.js.
+// The fight engine. Turn choices are worked out in plans.js.
 import * as R from './rules.js';
 import * as A from './arena.js';
 import { PATHS } from './data.js';
@@ -65,8 +62,7 @@ export class Game {
     return JSON.parse(JSON.stringify({ ...state, save: SAVE }));
   }
 
-  // Rebuild a saved fight with the current code. Each fighter's fixed details (stats, Path,
-  // traits, weapon) come from the current data. A save from other rules throws.
+  // Fixed details (stats, Path, traits, weapon) come from the current data. A save from other rules throws.
   static restore(state, defs, rng = Math.random) {
     if (state.save !== SAVE) throw new Error('This fight was saved under other rules.');
     const g = Object.create(Game.prototype);
@@ -101,7 +97,6 @@ export class Game {
     return this.twind(t, Math.max(R.WINDUP_MIN, R.windup(madra, t.divisor)), f.stats.control);
   }
 
-  // The fighter's Crown technique (for star accuracy and size), if they have one.
   crownTech(f) { return this.techList(f).find((t) => t.kind === 'forge'); }
   current() { return this.prompt ? this.fighters[this.prompt.fighter] : null; }
   hasTrait(f, t) { return f.traits.includes(t); }
@@ -121,7 +116,6 @@ export class Game {
     return Math.floor((t - st.raisedAt) / def.buildUp.every + EPS);
   }
 
-  // When a building stance gains its next build-up.
   nextBuildUp(f, def) {
     const st = f.stances[def.id];
     if (!def.buildUp || !st) return null;
@@ -137,7 +131,6 @@ export class Game {
       if (def.speedMult) s *= def.speedMult;
       if (def.buildUp) s *= 1 + def.buildUp.speed * this.buildUp(f, def, t);
     }
-    // The opponent's zones slow you while you stand in them.
     for (const z of this.zoneAt(this.opponent(f), at ? at.p : f.pos, t)) s *= 1 - (z.slow || 0);
     return s;
   }
@@ -187,7 +180,6 @@ export class Game {
       f.windups.map((w) => [w.start, w.end, w.pace || 0]), Object.keys(f.stances), this.rings(f).length, f.zones.map((z) => z.id), f.stats.speed])]);
   }
 
-  // The forecast, stepped at least as far as `until`.
   forecast(until) {
     const key = this.motionKey();
     if (!this.fc || this.fc.key !== key) this.fc = { key, t0: this.time, samples: [this.motionNow()] };
@@ -200,7 +192,6 @@ export class Game {
     return fc;
   }
 
-  // Where both fighters are at time t, by the forecast (between steps, in a straight line).
   forecastAt(t) {
     const fc = this.forecast(t);
     const x = (t - fc.t0) / DT;
@@ -232,7 +223,6 @@ export class Game {
     };
   }
 
-  // One forecast step of dt ticks from time t: flights fly, walkers walk at their pace.
   stepMotion(s, t, dt) {
     const out = { p: [...s.p], m: s.m.map((m) => ({ ...m })) };
     for (const f of this.fighters) {
@@ -290,9 +280,7 @@ export class Game {
     return pace;
   }
 
-  // The pace a technique leaves you while it winds up, or null for full pace: physical actions
-  // and stances full; Forger and Ruler techniques a third (those that build while you act, a
-  // third until your next turn, then two thirds); everything else two thirds.
+  // The pace a technique leaves you while it winds up, or null for full pace.
   paceFor(kind, t) {
     if (!t || ['strike', 'wait', 'drop', 'stance', 'launch', 'command'].includes(kind) || t.dtype === 'physical') return null;
     const { paceStriker, paceSlow } = R.TIMING;
@@ -334,7 +322,6 @@ export class Game {
     return `to (${fmt(walk.to.x)}, ${fmt(walk.to.y)})`;
   }
 
-  // Is a fighter holding a distance already at it?
   holding(walk, gap) { return Math.abs(gap - walk.hold) <= HOLD_SLACK + 0.05; }
 
   // When a fighter's order gets them where it's going (a spot, or their distance from the
@@ -379,7 +366,6 @@ export class Game {
     return best;
   }
 
-  // Would f walk out of Close range before `until`, by the forecast?
   leavesClose(f, until) {
     const fc = this.forecast(until);
     for (let k = 1; k < fc.samples.length && fc.t0 + k * DT <= until + EPS; k++) {
@@ -388,7 +374,6 @@ export class Game {
     return false;
   }
 
-  // Would a strike started at time t land in reach, by the forecast?
   strikeLands(f, prof, w, t) {
     return this.reaches(prof, this.pos(f, t + w), this.pos(this.opponent(f), t + w));
   }
@@ -434,7 +419,6 @@ export class Game {
     this.decision++;
   }
 
-  // Changing course as a reaction: it pushes the next turn later, and drops a strike waiting to start.
   changeCourse(f, walk) {
     const d = this.courseDelay(f);
     f.walk = walk;
@@ -458,8 +442,7 @@ export class Game {
   gap(t = this.time) { return A.dist(this.pos(this.fighters[0], t), this.pos(this.fighters[1], t)); }
   band(t = this.time) { return A.bandOf(this.gap(t)); }
 
-  // Where a construct is. Crown stars hang high over their owner (always Far, over every obstacle);
-  // barriers and rings sit on their owner.
+  // Crown stars hang high over their owner; barriers and rings sit on their owner.
   constructPos(owner, c, t = this.time) {
     const p = this.pos(owner, t);
     return c.kind === 'star' ? { x: p.x, y: p.y, z: A.STAR_HEIGHT } : p;
@@ -467,17 +450,15 @@ export class Game {
 
   ownerOf(c) { return this.fighters.find((f) => f.constructs.includes(c)); }
 
-  // From one point to another: the distance, its range band, and the obstacle in the way, if any.
   sight(from, to) {
     const dist = A.dist(from, to);
     return { dist, band: A.bandOf(dist), blockedBy: A.blocker(this.arena, from, to) };
   }
 
-  // What something reaches, in metres ({ min, max, best }): a technique, an attack profile, or a
-  // list of range bands.
+  // { min, max, best } in metres, for a technique, an attack profile, or a list of range bands.
   specOf(x) { return R.rangeSpec(Array.isArray(x) ? { ranges: x } : x); }
 
-  // Can something with this reach get from `from` to `to`? Overhead attacks (Crown stars) always can.
+  // Overhead attacks (Crown stars) always reach.
   reaches(x, from, to) {
     if (x.overhead) return true;
     const s = this.sight(from, to);
@@ -510,8 +491,8 @@ export class Game {
     return { warning, note: null };
   }
 
-  // The route a move would take: walking (around obstacles) or a straight flight up to `reach`.
-  // `to` is a point ("x:y") or "toward" / "away" (from the opponent).
+  // A route to `to`: walking (around obstacles), or a straight flight up to `reach`.
+  // `to` is a point ("x:y"), or "toward" / "away" from the opponent for a Launch.
   planMove(f, to, { reach = Infinity, flight = false } = {}) {
     const from = this.pos(f);
     const o = this.opponent(f);
@@ -527,22 +508,13 @@ export class Game {
   }
 
   // ---------- area attacks ----------
-  // An area attack is a shape fixed in place before anyone can react to it, hitting everything
-  // inside it with no roll:
-  //   circle, aim self: centred on the attacker, wherever they are when it lands (the default);
-  //   circle, aim set:  centred on a spot picked when it starts, within reach, in sight;
-  //   line:             a beam from where the attacker stands when it starts, toward a point
-  //                     picked then; it stops at the first obstacle or wall.
-  // A circle either emanates from its centre, so cover shelters you from it, or fills its area
-  // (`fills`: Endless Sword's resonance, a gas cloud) and reaches behind cover too.
-  // Circles grow with madra up to AREA_MAX; lines grow in
-  // length up to LINE_MAX and have a fixed width. An area with `zone` stays where it formed for a
-  // while and pulses (see zones below) instead of landing once.
+  // An area is a shape fixed in place when it starts: a circle around the attacker (aim self),
+  // a circle at a picked spot (aim set), or a line toward a picked point. `fills` reaches behind
+  // cover; `zone` stays and pulses instead of landing once.
   areaRadius(t, madra) {
     return Math.min(A.AREA_MAX, (t.radius ?? 4) + (t.radiusPerMadra ?? 0.5) * madra);
   }
 
-  // The area fields of an attack profile.
   areaFields(t, madra) {
     const zone = t.zone ? { zone: { duration: t.zone.duration, every: t.zone.every, slow: Math.min(R.ZONE_SLOW_MAX, (t.zone.slowPerMadra || 0) * madra) } } : {};
     if (t.shape === 'line') {
@@ -581,7 +553,6 @@ export class Game {
     return { centre, dist: s.dist };
   }
 
-  // A line from where f stands toward a point: where it starts and where it stops.
   planLine(f, prof, to) {
     const o = this.opponent(f);
     const raw = to === 'them' ? this.pos(o) : typeof to === 'string' ? A.parsePoint(to) : to;
@@ -594,28 +565,25 @@ export class Game {
     return { origin, end: { x: Math.round(end.x * 100) / 100, y: Math.round(end.y * 100) / 100 } };
   }
 
-  // Where an area attack's centre is at time t (the start of a line).
   areaCentre(f, prof, t = this.time) {
     if (prof.aim === 'line' && prof.origin) return prof.origin;
     if (prof.aim === 'set' && prof.centre) return prof.centre;
     return this.pos(f, t);
   }
 
-  // The shape an area attack makes if it lands at time t: { shape: 'circle', centre, radius } or
-  // { shape: 'line', from, to, width }.
+  // { shape: 'circle', centre, radius } or { shape: 'line', from, to, width }.
   areaShape(f, prof, t = this.time) {
     if (prof.shape === 'line') return { shape: 'line', from: prof.origin, to: prof.end, width: prof.width };
     return { shape: 'circle', centre: this.areaCentre(f, prof, t), radius: prof.radius, fills: !!prof.fills };
   }
 
-  // Is a point inside the circle, with a clear line from its centre (unless it fills its area)?
   areaCatch(centre, radius, p, fills = false) {
     const dist = A.dist(centre, p);
     const blockedBy = fills ? null : A.blocker(this.arena, centre, p);
     return { inside: dist <= radius + EPS && !blockedBy, dist, blockedBy, outside: dist > radius + EPS };
   }
 
-  // Is a point inside a shape? For a line, anyone whose body overlaps the beam.
+  // For a line, anyone whose body overlaps the beam.
   inArea(shape, p) {
     if (shape.shape === 'line') {
       const s = A.segDist(shape.from, shape.to, p);
@@ -625,7 +593,6 @@ export class Game {
     return this.areaCatch(shape.centre, shape.radius, p, shape.fills);
   }
 
-  // Would an area attack landing at time t catch the opponent?
   areaLands(f, prof, t) {
     const o = this.opponent(f);
     const shape = this.areaShape(f, prof, t);
@@ -664,11 +631,8 @@ export class Game {
   }
 
   // ---------- zones ----------
-  // A zone is an area that stays where it formed for `duration` ticks. It pulses when it forms
-  // and every `every` ticks after: each pulse hits whoever of the opponent's is inside then (no
-  // roll and no reaction; reduction and barriers apply), and its slow cuts the Speed of an
-  // opponent standing in it. Its pulses together deal ZONE_TOTAL times a one-off area attack of
-  // the same madra. Leaving early takes less; Madra Pulse can disperse it.
+  // A zone stays where it formed, pulsing when it forms and every `every` ticks after: no roll and
+  // no reaction, and its pulses together deal ZONE_TOTAL times a one-off area attack of the same madra.
   zoneAt(f, p, t = this.time) { return f.zones.filter((z) => (t <= this.time + EPS || z.until > t) && this.inArea(z.shape, p).inside); }
 
   formZone(f, o, prof, shape) {
@@ -817,8 +781,6 @@ export class Game {
     return hits;
   }
 
-  // Defense against rolled attacks: 6 + Perception + the speed modifier, and a dodge adds its
-  // bonus to every hit of the attack.
   defense(attacker, defender, dodging) {
     const sm = R.speedMod(this.speed(defender), this.speed(attacker));
     let d = 6 + defender.stats.perception + sm;
@@ -826,12 +788,10 @@ export class Game {
     return d;
   }
 
-  // Range penalty for an attack from f's position: by the distance to the opponent now, or the given distance.
   rangePenalty(prof, d = this.gap()) {
     return prof.area || prof.overhead ? 0 : R.rangePenalty(d, this.specOf(prof));
   }
 
-  // Area attacks don't roll, so they always hit.
   hitChance(attacker, defender, prof, dodging = false, d = this.gap()) {
     if (prof.area) return 1;
     const need = this.defense(attacker, defender, dodging) - attacker.stats.precision - prof.toHit + this.rangePenalty(prof, d);
@@ -852,13 +812,8 @@ export class Game {
     return `${pct(this.hitChance(attacker, defender, prof, false, d))} to hit${pen ? ` (−${pen} at ${fmt(d)} m)` : ''}`;
   }
 
-  // What one hit does to a fighter. Pure: doesn't change anything. In order:
-  //   Hollow Armor halves technique and spiritual damage;
-  //   damage reduction comes off: Spirit/10 for spiritual hits, otherwise Toughness (less
-  //   sharpness) plus stance reduction;
-  //   what gets through is soaked by a barrier (not spiritual hits), then by a block (blockLeft:
-  //   what the block has left to soak, shared by the attack's hits).
-  //   Spiritual damage goes to the spirit track and counts double against thresholds.
+  // What one hit does to a fighter, without changing anything.
+  // blockLeft: what the block has left to soak, shared by the attack's hits.
   hitResult(att, def, prof, { blockLeft = 0, barrierHp = null } = {}) {
     let raw = prof.damage;
     if (prof.dtype !== 'physical' && this.stanceFlag(def, 'halvesTechniques')) raw *= 0.5;
@@ -883,8 +838,7 @@ export class Game {
     };
   }
 
-  // Every hit of an attack in turn, as if all land: the barrier and the block soak what each
-  // hit gets through until they run out.
+  // Every hit of an attack in turn, as if all land: the barrier and the block soak until they run out.
   hitResults(att, def, prof, hits, block = 0) {
     const barrier = this.barrier(def);
     let barrierHp = barrier ? barrier.hp : 0;
@@ -897,14 +851,11 @@ export class Game {
     });
   }
 
-  // Damage a hit does to a construct: no reduction; spiritual hits do double.
   constructDamage(prof, raw = prof.damage) {
     return Math.round(raw * (prof.dtype === 'spiritual' ? 2 : 1));
   }
 
-  // A dodge against an area attack is a sidestep straight out from its centre, as far as the
-  // defender's Speed carries them and the walls and obstacles allow. It avoids the attack if it
-  // ends outside the circle or behind cover.
+  // A sidestep goes straight out from the centre (sideways out of a beam), as far as Speed, walls and obstacles allow.
   sidestep(def, prof) {
     const from = this.pos(def);
     const shape = prof.landed || this.areaShape(this.opponent(def), prof);
@@ -912,7 +863,6 @@ export class Game {
     let uy;
     let needs;
     if (shape.shape === 'line') {
-      // Out of a beam: sideways, away from its axis.
       const L = A.dist(shape.from, shape.to) || 1;
       const side = A.segDist(shape.from, shape.to, from);
       ux = (-(shape.to.y - shape.from.y) / L) * side.side;
@@ -944,8 +894,7 @@ export class Game {
         slider: { label: 'Ticks', min: R.TIMING.waitMin, max: R.TIMING.waitMax, step: 0.1, initial: R.TIMING.waitDefault },
       },
     ];
-    // Single-target attacks can be aimed at the opponent or one of their (non-barrier) constructs
-    // that the attack can reach.
+    // Single-target attacks can also be aimed at the opponent's constructs in reach (not barriers).
     const withTargets = (opt, reach) => {
       const where = (c) => this.sight(this.pos(f), this.constructPos(o, c));
       const targets = o.constructs.filter((c) => c.kind !== 'barrier' && this.reaches(reach, this.pos(f), this.constructPos(o, c)))
@@ -985,19 +934,17 @@ export class Game {
   }
 
   // ---------- turn plans ----------
-  // Everything about one turn choice, worked out once: what the preview says, what it costs,
-  // when the fighter's next turn comes, what goes on the queue, and what it starts.
   // preview(), project() and act() all read from the same plan (one planner per kind, PLANS below).
   //   enabled, reason, warning, lines  the preview
   //   cost      madra spent up front (Black Flame burns its user for it)
   //   nextTurn  when the fighter acts again
   //   queue     ghost queue items, in order; TURN marks the fighter's next turn
-  //   path      a move's route, for the field
+  //   path      a route, for the field
   //   project   (p) => adds the expected effect on the bars to a projection
   //   apply     () => starts it: wind-ups, events, log (act pays the cost and sets nextTurn)
   //   free      a free action (dropping a stance): act applies it and the turn goes on
   //   hypo      the course and pace it would set, for the movement forecast
-  // walk is where to walk meanwhile (see walkOrder); for a Move, the target is where to go.
+  // walk is the standing order to give alongside (see walkOrder).
   plan(f, key, amount = 0, target = '', walk = 'keep') {
     const o = this.opponent(f);
     const t = this.tech(f, key);
@@ -1023,7 +970,6 @@ export class Game {
     }
   }
 
-  // Preview lines about walking alongside a turn choice.
   walkLines(f, p) {
     const h = this.hypo;
     const o = this.opponent(f);
@@ -1042,20 +988,17 @@ export class Game {
     return lines;
   }
 
-  // Preview of a turn choice: { enabled, reason, warning, lines }
   preview(f, key, amount = 0, target = '', walk = 'keep') {
     const { enabled, reason, warning, lines } = this.plan(f, key, amount, target, walk);
     return { enabled, reason, warning, lines };
   }
 
-  // The madra a scaling technique would use for a slider amount.
   madraFor(f, t, amount) {
     return Math.min(Math.max(t.minMadra || 1, Math.round(amount)), this.maxMadra(f, t));
   }
 
   reraiseDelay(f) { return R.TIMING.reraiseDelay * R.controlFactor(f.stats.control); }
 
-  // A preview line for an attack: damage after the target's reduction, and the chance to hit.
   // d: the distance it lands at, if not now (a strike closing in).
   attackLines(f, prof, hits, tc = null, d = this.gap()) {
     const o = this.opponent(f);
@@ -1069,7 +1012,6 @@ export class Game {
     return `${hits > 1 ? hits + ' hits × ' : ''}${fmt(prof.damage)} damage (${res.dmg}${where} after reduction${soak}) · ${this.hitText(f, o, prof, d)}`;
   }
 
-  // The end of an attack's preview: sharpness, Black Flame boost, and the burn.
   attackNotes(f, t, prof, madra) {
     const lines = [];
     if (prof.sharpness) lines.push(`Sharpness ${prof.sharpness}`);
@@ -1087,8 +1029,7 @@ export class Game {
 
   launchReach(t) { return t.reach || A.LAUNCH_REACH; }
 
-  // Madra Pulse: what it would cancel on f at a given strength (madra, less blocks). It cancels
-  // wind-ups, stances and constructs (in range of the opponent) that cost at most half its strength.
+  // What a pulse of this strength would cancel on f: whatever cost at most half of it.
   pulseTargets(f, strength, ranges) {
     const from = this.pos(this.opponent(f));
     const limit = strength / 2 + EPS;
@@ -1170,7 +1111,6 @@ export class Game {
     }
     if (p.path) out.path = p.path;
     else if (p.hypo.walk) out.path = this.routeAhead(f, Math.max(p.nextTurn, this.time + 1));
-    // The expected damage of an attack on the opponent, if it lands.
     // d: the distance it lands at, if not now (a strike closing in).
     const hit = (prof, hits, d = this.gap()) => {
       if (target) { out.notes[o.index] = 'aimed at a construct'; return; }
@@ -1185,16 +1125,12 @@ export class Game {
   }
 
   // ---------- reactions ----------
-  // The defender's options against an attack that is landing. Every defense is one of three:
-  //   take it (static defenses: reduction, stances, barrier), dodge (time), block (madra);
-  // plus whatever a stance adds (the Mantle's redirect). Dodge and block can go together.
   reactionOptions() {
     const p = this.prompt;
     const a = p.attack;
     const att = this.fighters[a.attacker];
     const def = this.fighters[p.fighter];
-    // zeroAt: the block
-    // that would soak everything that gets through.
+    // zeroAt: the block that would soak everything that gets through.
     const block = (chance, total = 0) => ({
       chance, factor: 1, hits: a.hits, maxBase: this.maxMadra(def), delay: R.TIMING.blockDelay,
       soakPerMadra: R.blockReduction(1), zeroAt: Math.min(this.maxMadra(def), Math.ceil(total / R.blockReduction(1) - EPS)),
@@ -1240,12 +1176,10 @@ export class Game {
     };
   }
 
-  // The madra put into a block, within what the defender can channel.
   blockAmount(ro, blockBase) {
     return Math.min(Math.max(0, Math.round(blockBase)), ro.block.maxBase);
   }
 
-  // The result of a reaction choice: damage per hit, chance per hit, madra and time it costs.
   // walk: a change of course alongside the reaction (see walkOrder), which pushes the next turn later.
   reactionOutcome(choice, blockBase = 0, walk = 'keep') {
     const o = this.reactionOutcomeBase(choice, blockBase);
@@ -1311,7 +1245,6 @@ export class Game {
     };
   }
 
-  // What a reaction would change for the defender.
   projectReaction(choice, blockBase = 0, walk = 'keep') {
     if (!this.prompt || this.prompt.kind !== 'reaction') return null;
     const a = this.prompt.attack;
@@ -1334,7 +1267,6 @@ export class Game {
     return out;
   }
 
-  // The route a new course would take, for the field.
   coursePath(f, walk) {
     if (!walk) return null;
     const prev = this.hypo;
@@ -1457,8 +1389,7 @@ export class Game {
   }
 
   // ---------- opportunity strikes ----------
-  // When a fighter walks out of Close range, the opponent may strike them as they go. The strike
-  // lands at once, and pushes the striker's next turn back by the strike's time.
+  // The strike lands at once, and pushes the striker's next turn back by the strike's time.
   opportunityOptions() {
     const p = this.prompt;
     if (!p || p.kind !== 'opportunity') return null;
@@ -1599,7 +1530,6 @@ export class Game {
     this.advance();
   }
 
-  // A sidestep: the fighter ends up at `to`, and their walk stops there.
   stepTo(f, to) {
     f.walk = null;
     f.pos = { x: Math.round(to.x * 10) / 10, y: Math.round(to.y * 10) / 10 };
@@ -1640,7 +1570,6 @@ export class Game {
       this.addLog(`${att.name}'s ${label} hits ${def.name} for ${res.dmg}${res.track === 'spirit' ? ' spirit' : ''}${soak}. ${rollText}`, 'hit', att.index, this.hitFx(def, res));
       this.applyHit(def, res);
     }
-    // Area attacks also hit the defender's constructs in range (barriers only soak).
     if (prof.area && prof.effect !== 'disrupt') this.areaConstructHits(att, def, prof, hits);
     this.checkEnd();
   }
@@ -1679,7 +1608,7 @@ export class Game {
     f.lockedUntil[id] = this.time + this.reraiseDelay(f);
   }
 
-  // Disruption (Madra Pulse, Oathsign Seal): breaks wind-ups and stances, and constructs if it can.
+  // Breaks wind-ups and stances, and constructs if it can.
   disrupt(f, prof, from = this.pos(this.opponent(f))) {
     this.interrupt(f);
     this.breakStances(f);
@@ -1699,8 +1628,7 @@ export class Game {
     }
   }
 
-  // What a queued event would do to its target if it landed now: damage after reduction,
-  // chance to hit, and whether it breaks wind-ups or stances. Shown when hovering a wind-up.
+  // What a queued event would do to its target if it landed now. Shown when hovering a wind-up.
   describeEvent(e) {
     if (!e) return '';
     const f = this.fighters[e.actor];
@@ -1745,9 +1673,7 @@ export class Game {
     return `${dmg} to ${o.name} after reduction · ${roll}${breaks(each)}${out}`;
   }
 
-  // What a queued event would do to its target's bars if it landed now, as a projection like
-  // project() makes: damage after reduction (as if every hit lands) and a short note. Null for
-  // events that don't hit anyone (moves, stances, constructs forming).
+  // The same as a projection for the bars; null for events that don't hit anyone.
   projectEvent(id) {
     const e = this.events.find((x) => x.id === Number(id));
     if (!e) return null;
@@ -1800,12 +1726,10 @@ export class Game {
     return hit(this.hitResults(f, o, boosted, hits), boosted.area ? 'no roll' : `if ${hits > 1 ? 'all hit' : 'it hits'} (${pct(this.hitChance(f, o, boosted))}${hits > 1 ? ' each' : ''})`);
   }
 
-  // The same, for one of a fighter's wind-ups.
   describeWindup(w) {
     return this.describeEvent(this.events.find((e) => e.id === w.eventId));
   }
 
-  // The attack a wind-up will deliver, if it is one.
   windupProfile(w) {
     const ev = this.events.find((e) => e.id === w.eventId);
     return ev && ev.action.kind === 'attack' ? ev.action.profile : null;
@@ -1817,7 +1741,6 @@ export class Game {
   isEnforcedStrike(w) { const p = this.windupProfile(w); return !!p && p.dtype === 'physical' && p.madra > 0; }
 
   // Breaks wind-ups: all of them, or only the ones given (Madra Pulse picks the cheap ones).
-  // Plain strikes can't be broken; a broken enforced strike drops to a plain strike.
   interrupt(f, only = null) {
     const hit = (only || f.windups).filter((w) => !this.isPlainStrike(w));
     if (!hit.length) return;
@@ -1849,7 +1772,7 @@ export class Game {
   }
 
   // ---------- time ----------
-  // Time moves on to t: upkeep is paid, and everyone walks (or flies) to where the forecast has them.
+  // Time moves on to t: upkeep is paid, madra comes back, and everyone walks (or flies) to where the forecast has them.
   advanceTo(t) {
     const end = t > this.time + EPS ? this.motionAt(t) : null;
     let remaining = t - this.time;
@@ -2010,7 +1933,6 @@ export class Game {
     this.askReaction(o, { attacker: f.index, profile, hits: this.hitsAgainst(f, o, profile) });
   }
 
-  // The defender gets to choose how to react to an attack that is landing.
   askReaction(def, attack) {
     this.prompt = { kind: 'reaction', fighter: def.index, attack };
     this.decision++;
@@ -2023,7 +1945,6 @@ export class Game {
     return { ...prof, damage: prof.damage + boost };
   }
 
-  // An area attack lands: find its centre, then hit everything inside with a clear line from it.
   // The opponent gets to react if they're inside; constructs inside are hit either way.
   landArea(f, o, profile0, boost) {
     const l = this.areaLands(f, profile0, this.time);
@@ -2063,7 +1984,7 @@ export class Game {
     this.addLog(`${f.name}'s ${b.name} builds: ${fmt(b.hp)} HP (piece ${n}/${of}).`, n === of ? '' : 'dim', f.index);
   }
 
-  // Offer or withdraw a draw. When both fighters are offering at once, the fight ends in a draw.
+  // When both fighters are offering at once, the fight ends in a draw.
   setDrawOffer(index, on) {
     if (this.result || this.drawOffers[index] === on) return;
     const f = this.fighters[index];

@@ -277,7 +277,6 @@ export const PLANS = {
     };
   },
 
-  // A damaging technique: single-target (rolled) or an area (no roll).
   attack(g, f, ctx) {
     const s = scaled(g, f, ctx);
     if (!s) return notEnough;
@@ -337,8 +336,7 @@ export const PLANS = {
   },
 };
 
-// The shared part of techniques that scale with madra (stars, barriers, attacks): the madra
-// used, its wind-up, what it costs, and the timing line. Null if there isn't enough madra.
+// The shared part of techniques that scale with madra. Null if there isn't enough madra.
 function scaled(g, f, { t, amount }) {
   if (g.maxMadra(f, t) < (t.minMadra || 1)) return null;
   const madra = g.madraFor(f, t, amount);

@@ -1,8 +1,6 @@
-// Claude as a player. When a side is handed to Claude, the app saves the board to the
-// server after every change (.duel/state.json), and applies Claude's moves from /api/move
-// whenever that side has a decision to make. Claude plays either through the API (the server
-// asks the Claude API for each move; see claude_player.py) or from a chat (Claude runs the
-// scripts in tools/).
+// Claude as a player. When a side is handed to Claude, the app saves the board to the server
+// after every change and applies Claude's moves from /api/move. Claude plays through the API
+// (claude_player.py) or from a chat (the scripts in tools/).
 import { fmt } from './engine.js';
 import { RANGES } from './rules.js';
 import { BANDS } from './arena.js';
@@ -139,8 +137,7 @@ export function syncClaude(game) {
   }
 }
 
-// Claude's recent decisions through the API: the summary of its thinking, its note to itself,
-// and the move it made. Newest first.
+// Claude's recent decisions through the API, newest first.
 function renderMind(game) {
   const panel = document.getElementById('claude-mind');
   const api = state.via === 'api' && state.side != null ? state.api : null;

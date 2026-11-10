@@ -131,7 +131,6 @@ function svg(tag, attrs = {}) {
   return el;
 }
 
-// An area's shape on the map: a circle, or a beam drawn as a rectangle along its line.
 function shapeEl(shape, cls) {
   if (shape.shape === 'line') {
     const { from, to, width } = shape;
@@ -147,7 +146,6 @@ function shapeEl(shape, cls) {
 const progress = (game, w) => Math.min(1, Math.max(0, (game.time - w.start) / Math.max(0.01, w.end - w.start)));
 const points = (from, path) => [from, ...path].map((p) => `${p.x},${p.y}`).join(' ');
 
-// Place an HTML element at a point on the arena.
 const pctOf = (game, p) => ({ left: `${(p.x / game.arena.width) * 100}%`, top: `${(p.y / game.arena.height) * 100}%` });
 function place(el, game, p) {
   Object.assign(el.style, pctOf(game, p));
@@ -250,7 +248,6 @@ function toPoint(arena, e) {
   return { x: snap(((e.clientX - r.left) / r.width) * W), y: snap(((e.clientY - r.top) / r.height) * H) };
 }
 
-// A targeted attack is open: the target nearest the mouse (the opponent, or one of their constructs).
 function snapTarget(p) {
   const list = view.reach ? view.reach.targets : [];
   let best = null;
@@ -261,8 +258,7 @@ function snapTarget(p) {
   return best && best.d < 3 ? best : null;
 }
 
-// Draw the hover, then tell the page what's under the mouse when that changes, so it can
-// preview the choice there (a move's time on the timeline, say).
+// Tell the page what's under the mouse when that changes, so it can preview the choice there.
 function drawHover(arena) {
   hoverValue = null;
   drawHoverAt(arena);
@@ -273,9 +269,6 @@ function drawHover(arena) {
   }
 }
 
-// Walking: the route to the spot under the mouse. Launch: the flight there.
-// While a targeted attack is open: which target the mouse is on, and whether it's in reach
-// (away from any target, walking as usual).
 function drawHoverAt(arena) {
   const layer = arena.querySelector('.hover');
   const tip = arena.querySelector('.arena-tip');
@@ -366,7 +359,6 @@ export function renderField(game, opts = {}) {
   const pos = game.fighters.map((f) => game.pos(f));
   const sight = game.sight(pos[0], pos[1]);
 
-  // The range, shown once: the band the fighters are in, with the gap.
   root.querySelector('.field-info').textContent = sight.blockedBy ? `a ${sight.blockedBy.name} blocks the line between them` : '';
   root.querySelector('.rng').innerHTML = RANGES.map((r, i) => `<span class="${i === sight.band ? 'on' : ''}">${r}${i === sight.band ? ` · ${fmt(sight.dist)} m` : ''}</span>`).join('');
 
@@ -374,8 +366,7 @@ export function renderField(game, opts = {}) {
   const acting = game.prompt && game.prompt.fighter != null ? game.fighters[game.prompt.fighter] : game.fighters[0];
   const rings = arena.querySelector('.rings');
   rings.setAttribute('class', `rings theme-${acting.theme}`);
-  // An open targeted attack shows its own reach instead: best distance dashed, farthest solid,
-  // and marks each target in or out of reach.
+  // An open targeted attack shows its own reach instead: best distance dashed, farthest solid.
   if (view.reach) {
     const at = pos[acting.index];
     const { best, max } = view.reach.spec;
@@ -431,7 +422,7 @@ export function renderField(game, opts = {}) {
   }
   arena.querySelector('.areas').replaceChildren(...areas);
 
-  // A previewed route (hovering a move card, or the destination already chosen).
+  // A previewed route: the walk order being chosen, or a Launch.
   const plan = opts.plan;
   arena.querySelector('.plan').replaceChildren(...(plan ? [(() => {
     const g = svg('g', { class: `theme-${game.fighters[plan.who].theme}` });

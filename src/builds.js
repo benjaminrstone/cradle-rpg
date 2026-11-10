@@ -54,7 +54,6 @@ export function newBuild(templateId) {
   };
 }
 
-// ---------- costs ----------
 export function statCost(build, stat) {
   const n = build.steps[stat] || 0;
   const free = n > 0 && getPath(build.path).signatureStat === stat ? 1 : 0;
@@ -133,7 +132,6 @@ export function toFighter(build) {
   };
 }
 
-// ---------- saved builds ----------
 const KEY = 'builds';
 export function loadBuilds() {
   try {

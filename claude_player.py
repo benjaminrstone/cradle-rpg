@@ -33,8 +33,7 @@ PRICES = {
 }
 
 
-# ---------------------------------------------------------------------------------------------
-# The board as text
+# ---------- the board as text ----------
 
 
 def pct(p):
@@ -182,8 +181,7 @@ def describe(s, served_version=None):
     return "\n".join(out)
 
 
-# ---------------------------------------------------------------------------------------------
-# The request
+# ---------- the request ----------
 
 INSTRUCTIONS = """You are playing Cradle Duel, a dueling game set in Will Wight's Cradle, against a human. You control one fighter; play to win.
 
@@ -261,8 +259,7 @@ def cost_of(model, usage):
     ) / 1e6
 
 
-# ---------------------------------------------------------------------------------------------
-# The player
+# ---------- the player ----------
 
 
 class AutoPlayer:
