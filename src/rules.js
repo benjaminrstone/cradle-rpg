@@ -38,6 +38,9 @@ export const AREA_EFFICIENCY = 0.75;
 export const ZONE_TOTAL = 1.5;
 export const ZONE_SLOW_MAX = 0.5;
 
+// Ruler techniques draw on aura as they build: they take this many times the channel cap.
+export const RULER_CAP = 2;
+
 // Madra comes back at this share of the pool per tick.
 export const REGEN = 0.003;
 
@@ -98,8 +101,10 @@ export function sidestep(speed) {
   return TIMING.sidestep * (speed / 100) ** 2;
 }
 
+// A block trades madra for damage one for one, in all, across the attack's hits.
+export const BLOCK_SOAK = 1;
 export function blockReduction(madra) {
-  return 1.5 * madra;
+  return BLOCK_SOAK * madra;
 }
 
 // Black Flame burns its user for the madra they spend.

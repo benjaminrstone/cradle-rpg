@@ -551,8 +551,8 @@ function reactionModel() {
   const dodgeText = !canDodge ? '' : st
     ? `Sidestep ${fmt(st.metres)} m out from its centre: ${st.escapes ? '<b>gets you out</b>' : `still inside (you'd need ${fmt(st.needs)} m)`}`
     : `+${ro.dodge.bonus} Defense on ${a.hits > 1 ? 'every hit' : 'the hit'}`;
-  const blockText = !canBlock ? '' : kind === 'pulse' ? `−1.5 strength per madra · up to ${ro.block.maxBase}`
-    : `soaks 1.5 per madra${a.hits > 1 ? ', shared by the hits' : ''} · up to ${ro.block.maxBase}`;
+  const blockText = !canBlock ? '' : kind === 'pulse' ? `−${ro.block.soakPerMadra} strength per madra · up to ${ro.block.maxBase}`
+    : `soaks ${ro.block.soakPerMadra} per madra${a.hits > 1 ? ', shared by the hits' : ''} · up to ${ro.block.maxBase}`;
 
   // The outcome of the current choice.
   const o = current;

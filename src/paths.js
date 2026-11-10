@@ -55,7 +55,7 @@ export const TEMPLATES = {
     knobs: [DTYPE, num('effMult', 'Damage ×', 0, 1.4, 0.05, 1), MIN_R(0), MAX_R(1), ...AREA_KNOBS.map((x) => (x.key === 'fills' ? { ...x, def: true } : x)),
       num('duration', 'Lasts (ticks)', 2, 16, 1, 8), num('every', 'Pulses every (ticks)', 1, 8, 1, 4), num('slowPerMadra', 'Slow per madra (%)', 0, 5, 0.5, 0)],
     make: (k) => ({ kind: 'attack', divisor: 2, area: true, ruler: true, dtype: k.dtype === 'spiritual' ? 'spiritual' : undefined, effMult: k.effMult, ranges: rangeList(k.minRange, k.maxRange), ...areaFields(k), zone: { duration: k.duration, every: k.every, slowPerMadra: k.slowPerMadra / 100 } }),
-    describe: (k) => `A field that settles ${areaText(k)} after its wind-up and stays ${k.duration} ticks, pulsing when it forms and every ${k.every} after${k.effMult > 0 ? ` (its pulses together deal 1.5× an area attack${k.effMult !== 1 ? `, × ${k.effMult}` : ''})` : ' (no damage)'}${k.slowPerMadra ? `; −${k.slowPerMadra}% Speed per madra to anyone of the opponent's inside (up to 50%)` : ''}. Ruler: no channel cap, and you act again soon while it builds.`,
+    describe: (k) => `A field that settles ${areaText(k)} after its wind-up and stays ${k.duration} ticks, pulsing when it forms and every ${k.every} after${k.effMult > 0 ? ` (its pulses together deal 1.5× an area attack${k.effMult !== 1 ? `, × ${k.effMult}` : ''})` : ' (no damage)'}${k.slowPerMadra ? `; −${k.slowPerMadra}% Speed per madra to anyone of the opponent's inside (up to 50%)` : ''}. Ruler: up to twice your channel cap, and you act again soon while it builds.`,
   },
   empowered: {
     label: 'Empowered strike', type: 'Enforcer',
@@ -67,7 +67,7 @@ export const TEMPLATES = {
     label: 'Ruler technique', type: 'Ruler',
     knobs: [DTYPE, num('effMult', 'Damage ×', 0.6, 1.4, 0.05, 1), MIN_R(0), MAX_R(1), ...AREA_KNOBS],
     make: (k) => ({ kind: 'attack', divisor: 2, area: true, ruler: true, dtype: k.dtype === 'spiritual' ? 'spiritual' : undefined, effMult: k.effMult, ranges: rangeList(k.minRange, k.maxRange), ...areaFields(k) }),
-    describe: (k) => `Long build-up, then a wide blast: no channel cap, wind-up ÷ 2, and you act again soon while it builds. Area attack, no roll, ${areaText(k)}${k.effMult !== 1 ? `, ${k.effMult}× damage` : ''}.`,
+    describe: (k) => `Long build-up, then a wide blast: up to twice your channel cap, wind-up ÷ 2, and you act again soon while it builds. Area attack, no roll, ${areaText(k)}${k.effMult !== 1 ? `, ${k.effMult}× damage` : ''}.`,
   },
   stance: {
     label: 'Stance', type: 'Enforcer stance',

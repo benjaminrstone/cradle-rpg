@@ -8,7 +8,7 @@ Nine stats in three groups: Body, Spirit, and Mind. Stage multiplies Body and Sp
 | | Toughness | Flat damage reduction against physical hits | Guard, Enforcers |
 | | Speed | Movement, physical attacks and dodges, how far physical actions push you down the queue, how hard you are to hit | Press, movement |
 | **Spirit** | Madra pool | Total budget | Forgers, long fights |
-| | Channel cap | Most madra per action (Ruler techniques aren't limited by it) | Build, Strikers |
+| | Channel cap | Most madra per action (Ruler techniques take up to twice as much) | Build, Strikers |
 | | Spirit | Spirit track, and damage reduction against spiritual hits | Spirit specialists, anyone facing them |
 | **Mind** | Precision | Attack roll bonus | Strikers, Press |
 | | Control | Technique speed, upkeep cost, delay before a dropped technique can be raised again, interrupt threshold | Build, Enforcer stances, Forgers |
@@ -21,7 +21,7 @@ Nine stats in three groups: Body, Spirit, and Mind. Stage multiplies Body and Sp
 - **Interrupts:** the threshold comes from Control: how firmly you hold a technique together. Spiritual hits count extra against it. Traits like an iron body can raise it.
 - **Speed:** physical speed is a Body stat and scales with stage. Technique speed comes from Control and doesn't.
 - **Perception:** a fighter with higher Perception sees more of a wind-up and notices more about an opponent than one with lower Perception.
-- **Madra regeneration** isn't a stat.
+- **Madra regeneration** isn't a stat: every fighter gets back 0.3% of their pool per tick.
 
 ## Where build expression comes from
 
@@ -73,9 +73,9 @@ Fighters are built with points. Every stat starts at the typical value for the s
 
 Body and Spirit steps are fractions of the stage's typical value, so they scale when a fighter advances; Mind steps are flat.
 
-- **Each step up costs 1 point,** with no limit per stat.
+- **Each step up costs one more than the last:** 1, then 2, then 3. So +3 in a stat costs 6 points, and no stat has a limit.
 - **Each step down pays back 1 point,** down to −3 per stat.
-- **A named fighter has 6 points to spend,** plus whatever their weaknesses pay back.
+- **A named fighter has 8 points to spend,** plus whatever their weaknesses pay back.
 - **Each Path grants its signature stat's first step free:** madra pool for the Hollow King, Precision for the Endless Sword, Toughness for the Dawn Oath, channel cap for Black Flame.
 - **Traits and weapons come out of the same budget,** so a Goldsign or a better weapon competes with stats.
 
@@ -89,15 +89,15 @@ Body and Spirit steps are fractions of the stage's typical value, so they scale 
 - **Three ways to defend.** Every defense is one of three, each paid in a different currency:
   - **Take it (free):** static defenses only: damage reduction, stances, a barrier.
   - **Dodge (time):** pushes your next action 2 ticks later (a physical action, so it shrinks with Speed). Against a rolled attack it adds +2 to Defense plus the speed modifier a second time (minimum +0), on every hit. Against an area attack it's a sidestep straight out from the centre, 2 m at Speed 100 (× (Speed / 100)², stopping at walls and obstacles): if that takes you outside the circle or behind cover, the attack misses you; otherwise it lands in full.
-  - **Block (madra):** up to your channel cap. Each madra soaks 1.5 damage, in all, shared by the attack's hits (so blocking several hits costs no more than one big one). Pushes your next action 1 tick later.
+  - **Block (madra):** up to your channel cap. Each madra soaks 1 damage, in all, shared by the attack's hits (so blocking several hits costs no more than one big one). Pushes your next action 1 tick later.
   - A defender can dodge and block the same attack, paying both. A sidestep that gets you out of an area means the block isn't spent.
   - Some stances add their own option (the Hollow King's Mantle can redirect a technique).
 - **Order of a hit:** Hollow Armor halves technique and spiritual damage; damage reduction comes off; then a barrier soaks what gets through (not spiritual hits), then a block.
 - **Damage reduction:** Toughness against physical and technique hits; Spirit / 10 against spiritual hits. Comes off every hit, so small hits vanish against Guard while a block is insurance against one big hit. Resistance to one element doesn't help against another.
 - **Physical damage:** a base value that scales with stage, changed by iron bodies, weapons, artifacts, and Enforcer techniques. Costs no madra.
-- **Technique damage:** about 1.5–2 damage per point of madra spent.
+- **Technique damage:** 1.2 damage per point of madra, plus 0.1 for every 3 madra in it, up to 2.2 (techniques.md).
 - **Interrupts:** a hit interrupts if, after damage reduction, it deals at least 1.6 × Control% of the defender's max Health (8 at Control 5). Spiritual hits count double. It breaks everything the defender is winding up, except plain strikes; an enforced strike drops to a plain strike.
 - **Breaking stances:** stances are held more firmly. A hit of at least twice the interrupt threshold (16 at Control 5) breaks every stance the defender holds: they drop and can't be raised again until the re-raise delay passes.
 - **Physical action time:** base time × (100 / Speed)². A strike's base time is 2 ticks and a dodge's 2; walking covers 2 m per tick × (Speed / 100)², slowed by whatever else you're doing (battlefield.md).
-- **Technique wind-up:** 3% shorter per point of Control.
+- **Technique wind-up:** grows faster than the madra in it (techniques.md), and is 3% shorter per point of Control.
 - **Upkeep and re-raise delay:** 5% lower per point of Control.

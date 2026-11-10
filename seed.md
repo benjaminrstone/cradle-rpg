@@ -1,6 +1,6 @@
 # Seed: a Cradle fighting game
 
-A tempo game where every power costs time or madra. Cut anything that doesn't put a visible decision or a visible counter in front of the player; anything hidden gets a loud reveal when it's used. The clock is the game. Madra is the budget. Techniques are the content.
+A tempo game where every power costs time or madra. Cut anything that doesn't put a visible decision or a visible counter in front of the player; anything hidden gets a loud reveal when it's used. Stop the game only for a choice that matters. The clock is the game. Madra is the budget. Techniques are the content.
 
 ## The game
 
@@ -24,7 +24,7 @@ The clock creates counterplay on its own if power costs time. Three ways to figh
 - **Build** (slow, heavy techniques) overwhelms **Guard**.
 - **Guard** (toughness, held stances) shrugs off **Press**.
 
-Techniques should generally trade off between time, power, and madra efficiency. Techniques with unique or secondary effects should be carefully balanced.
+One dial sets the trade: how much madra goes in. A small technique is quick and a big one is efficient, and the target's toughness decides which pays. Techniques with unique or secondary effects should be carefully balanced.
 
 ## Hits
 
@@ -36,7 +36,7 @@ A hit above a threshold interrupts a wind-up. Spiritual hits have a lower thresh
 
 ## Two resources, two defenses
 
-Time and madra. Evade with time: a dodge delays your next action. Absorb with madra: a block or stance spends budget. Nimble fighters bleed tempo, tough fighters bleed pool.
+Time and madra. Evade with time: a dodge delays your next action. Absorb with madra: a block or stance spends budget. Nimble fighters bleed tempo, tough fighters bleed pool. A block never wins the madra trade against the attack it stops: it buys safety, not advantage.
 
 The channel cap is the most madra you can push through one action, helps prevent fights from becoming single actions using the entire madra pool.
 
@@ -52,18 +52,21 @@ Two tracks, and running out of either loses the fight. Spirit is separate from t
 
 ## Range and movement
 
-The final design has a battlemap. Prototype with range bands. Movement and movement techniques are important aspects of the fight.
+Fights happen on a battlemap. Walking is a standing order (close in, hold a distance, go to a spot) that runs alongside every action, so it never costs a turn; the game stops for it only when an area is about to catch you. Movement techniques are the fast exceptions.
 
 ## Legibility
 
 - Madra can be sensed, so wind-ups are public. The type of technique is visible, the effects of it usually not until it has been used (or scouted).
 - Anything unknown gets a loud, clear reveal the first time it's used: a technique, an iron body, a bloodline trait.
 - Counter-traits (like an iron body that can't be interrupted) are rare and hidden until revealed or scouted. That's part of what makes scouting valuable, and what keeps powerful opponents fresh.
+- What just happened shows on the board: a hit, a miss, a broken technique. The log is the record, not the display.
 - The defender sees the attack before choosing how to react (let it miss, take the hit, dodge out of the way, block or deflect or reflect), along with the chance to hit for each option. The roll happens after they choose how to react.
 
 ## Statistics
 
 Core statistics should represent (solely or in combination) stage, skill, speed, health, toughness, spirit, spiritual defense, madra pool, and channel cap. The exact list of statistics is not yet defined.
+
+Each step in a stat costs more than the last, so within a stage no stat runs away from the others. Across a stage gap, it still can.
 
 ## Techniques
 

@@ -57,8 +57,8 @@ export const PATHS = {
       },
       {
         id: 'voidDragonsDance', name: "Void Dragon's Dance", kind: 'attack', type: 'Ruler',
-        divisor: 2, toHit: 0, ranges: [0, 1], area: true, radius: 4, radiusPerMadra: 0.5, boostPerMadra: 1, ruler: true, fills: true,
-        desc: 'Finisher: a long build-up, then a wide blast. Ruler: no channel cap, and your next turn comes 1.5 ticks after you start, so you keep acting while it builds. Area attack centred on you, no roll: the fire and destruction aura around you ignites, hitting everything within 4 m + 0.5 m per madra of you (up to 14 m), behind cover or not. +1 damage per Black Flame madra you spend while it winds up.',
+        divisor: 2, toHit: 0, ranges: [0, 1], area: true, radius: 4, radiusPerMadra: 0.5, boostPerMadra: 0.5, ruler: true, fills: true,
+        desc: 'Finisher: a long build-up, then a wide blast. Ruler: up to twice your channel cap, and your next turn comes 1.5 ticks after you start, so you keep acting while it builds. Area attack centred on you, no roll: the fire and destruction aura around you ignites, hitting everything within 4 m + 0.5 m per madra of you (up to 14 m), behind cover or not. +0.5 damage per Black Flame madra you spend while it winds up.',
       },
     ],
   },
@@ -123,7 +123,7 @@ export const PATHS = {
       {
         id: 'madraPulse', cost: 2, name: 'Madra Pulse', kind: 'pulse', type: 'Striker / Ruler',
         divisor: 6, minMadra: 2, area: true, ranges: [0],
-        desc: 'A wash of pure madra at Close range. It cancels every wind-up, stance and construct of your opponent\u2019s there that cost at most half the madra you put in. They can block it: each madra of block takes 1.5 off its strength. No damage, no roll.',
+        desc: 'A wash of pure madra at Close range. It cancels every wind-up, stance and construct of your opponent\u2019s there that cost at most half the madra you put in. They can block it: each madra of block takes 1 off its strength. No damage, no roll.',
       },
     ],
   },
@@ -181,7 +181,7 @@ PATHS.sandviper = {
       id: 'paralyticCloud', name: 'Paralytic Cloud', kind: 'attack', type: 'Ruler',
       divisor: 2, ruler: true, area: true, aim: 'set', ranges: [0, 1], radius: 3, radiusPerMadra: 0.25, fills: true,
       zone: { duration: 8, every: 4, slowPerMadra: 0.02 },
-      desc: 'A Ruler technique that fills the air with toxic green gas. Set it at a spot within 10 m that you can see: after its wind-up it settles there (3 m + 0.25 m per madra) and stays 8 ticks. Anyone of your opponent\u2019s inside is slowed by 2% Speed per madra (up to 50%), and it pulses when it forms and every 4 ticks after. Ruler: no channel cap, and your next turn comes 1.5 ticks after you start.',
+      desc: 'A Ruler technique that fills the air with toxic green gas. Set it at a spot within 10 m that you can see: after its wind-up it settles there (3 m + 0.25 m per madra) and stays 8 ticks. Anyone of your opponent\u2019s inside is slowed by 2% Speed per madra (up to 50%), and it pulses when it forms and every 4 ticks after. Ruler: up to twice your channel cap, and your next turn comes 1.5 ticks after you start.',
     },
   ],
 };

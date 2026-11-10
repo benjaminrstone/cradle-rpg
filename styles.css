@@ -538,3 +538,35 @@ span.draw-offer { font-size: 12px; padding: 2px 9px; border: 1px solid; border-r
 .p-swatch { padding: 3px 10px; border: 1px solid; border-radius: 999px; font-size: 12px; font-weight: 650; }
 .p-knob input[type=color] { width: 44px; height: 26px; padding: 0 2px; background: none; border: 1px solid var(--line); }
 
+
+/* ---------- narrow screens: one column, the choice right under the board ---------- */
+@media (max-width: 1100px) {
+  .topbar { height: auto; flex-wrap: wrap; gap: 8px 12px; padding: 8px 12px; }
+  .layout { grid-template-columns: minmax(0, 1fr); height: auto; min-height: 0; padding: 10px; }
+  .board, .side { display: contents; }
+  .vs { order: 1; }
+  .field { order: 2; flex: none; }
+  .field .arena-wrap { flex: none; height: min(56vw, 420px); }
+  .prompt { order: 3; overflow: visible; }
+  .queue { order: 4; }
+  .mind { order: 5; max-height: none; }
+  .log { order: 6; flex: none; max-height: 280px; }
+}
+@media (max-width: 640px) {
+  .vs { gap: 6px; }
+  .fp { padding: 8px; }
+  .fp-head { flex-wrap: wrap; }
+  .fp-head .turn { margin-left: 0; }
+  .thr-key, .field-head .rng span:not(.on) { display: none; }
+  .bar { grid-template-columns: 0 1fr auto; gap: 4px; }
+  .bar .bl { visibility: hidden; }
+  .bar .bv { min-width: 0; }
+  .fp-foot { flex-wrap: wrap; }
+  .fp-tab { position: static; box-shadow: none; border: none; padding: 6px 0 0; }
+  .rx { grid-template-columns: 1fr; }
+  .rx > :only-child { grid-column: auto; }
+  .tl-body { grid-template-columns: 44px 1fr; }
+  .detail { margin-left: 0; }
+  .mrow { grid-template-columns: 18px auto 1fr auto; }
+  .mrow .gist { white-space: normal; }
+}

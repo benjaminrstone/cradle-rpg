@@ -18,14 +18,14 @@ function loadWhole() {
 }
 
 // ---------- camera ----------
-const PAD = 5;         // metres kept clear around what's framed
-const MIN_WIDTH = 24;  // the closest the camera gets
+const PAD = 5;          // metres kept clear around what's framed
 const MIN_HEIGHT = 11;
-const STEP = 4;        // the view widens and narrows in steps, so it doesn't twitch
+const CLOSEST = 33;     // pixels per metre at the closest, so tokens in Close range stay apart
+const STEP = 4;         // the view widens and narrows in steps, so it doesn't twitch
 
 // The part of the arena to show: both fighters, where they're walking, and every area on the
 // field or winding up. Game state only, so hovering never moves the camera.
-function frame(game, aspect) {
+function frame(game, aspect, pixels) {
   const { width: W, height: H } = game.arena;
   // The whole arena, with room to spare on whichever side the viewport is longer.
   const whole = Math.max(W, H * aspect);
@@ -47,7 +47,7 @@ function frame(game, aspect) {
   const x1 = clampX(Math.max(...pts.map((q) => q.x)) + PAD);
   const y0 = clampY(Math.min(...pts.map((q) => q.y)) - PAD);
   const y1 = clampY(Math.max(...pts.map((q) => q.y)) + PAD);
-  const w = Math.ceil(Math.max(MIN_WIDTH, MIN_HEIGHT * aspect, x1 - x0, (y1 - y0) * aspect) / STEP) * STEP;
+  const w = Math.ceil(Math.max(pixels / CLOSEST, MIN_HEIGHT * aspect, x1 - x0, (y1 - y0) * aspect) / STEP) * STEP;
   if (w >= whole) return centred(whole, W / 2, H / 2);
   // Stay inside the arena where the view fits in it; otherwise centre on it.
   const h = w / aspect;
@@ -62,7 +62,7 @@ function aim(world, game) {
   const { width: W, height: H } = game.arena;
   const port = world.parentElement;
   if (!port.clientHeight) return;
-  const v = frame(game, port.clientWidth / port.clientHeight);
+  const v = frame(game, port.clientWidth / port.clientHeight, port.clientWidth);
   const zoom = W / v.w;
   world.style.setProperty('--zoom', zoom);
   world.style.transform = `translate(${(-v.x / W) * 100 * zoom}%, ${(-v.y / H) * 100 * zoom}%) scale(${zoom})`;

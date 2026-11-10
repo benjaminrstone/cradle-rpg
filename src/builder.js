@@ -53,7 +53,7 @@ function render() {
         <span class="b-step">
           <button data-b-stat="${k}" data-d="-1" ${n <= -STAT_FLOOR ? 'disabled' : ''}>−</button>
           <b>${fmtStep(n)}</b>
-          <button data-b-stat="${k}" data-d="1">+</button>
+          <button data-b-stat="${k}" data-d="1" title="The next step up costs ${Math.max(1, n + 1)}">+</button>
         </span>
         <span class="b-cost ${statCost(draft, k) < 0 ? 'refund' : ''}">${n ? `${statCost(draft, k)} pt` : ''}</span>
         <span class="muted small">${STAT_STEP[k]} per step</span>

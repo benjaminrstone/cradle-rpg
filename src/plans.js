@@ -164,7 +164,7 @@ export const PLANS = {
       `Wind-up ${fmt(w)} (lands t=${fmt(g.time + w)}) · next turn in ${fmt(w)}`,
       `Cancels ${o.name}'s wind-ups, stances, constructs and zones (ones you stand in) costing up to ${fmt(madra / 2)} · no roll`,
       targets.length ? `Right now: ${targets.map((x) => `${x.name} (${fmt(x.cost)})`).join(', ')}` : `Nothing of ${o.name}'s is that cheap right now`,
-      `${o.name} can block it: each madra takes 1.5 off its strength`,
+      `${o.name} can block it: each madra takes ${R.BLOCK_SOAK} off its strength`,
     ];
     if (gate.note) lines.push(gate.note);
     return {

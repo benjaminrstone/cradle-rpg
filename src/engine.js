@@ -727,12 +727,10 @@ export class Game {
     }
   }
 
-  // Most actions are limited by channel cap; Ruler techniques draw on aura over their long
-  // build-up and are limited only by the madra you have.
   // The most madra-power a technique can be used at. A technique with costMult spends that many
   // madra per point of power, and what it spends is what the channel cap limits.
   maxMadra(f, t = null) {
-    const limit = t && t.ruler ? f.madra : Math.min(f.stats.cap, f.madra);
+    const limit = Math.min(f.stats.cap * (t && t.ruler ? R.RULER_CAP : 1), f.madra);
     return Math.max(0, Math.floor(limit / ((t && t.costMult) || 1)));
   }
 
@@ -1195,7 +1193,7 @@ export class Game {
     const a = p.attack;
     const att = this.fighters[a.attacker];
     const def = this.fighters[p.fighter];
-    // A block soaks 1.5 damage per madra, in all, across the attack's hits. zeroAt: the block
+    // zeroAt: the block
     // that would soak everything that gets through.
     const block = (chance, total = 0) => ({
       chance, factor: 1, hits: a.hits, maxBase: this.maxMadra(def), delay: R.TIMING.blockDelay,
@@ -1349,13 +1347,16 @@ export class Game {
   }
 
   // ---------- changing course ----------
-  // When the opponent has just taken a turn, a fighter may change course (or keep it).
+  // When an area that would catch a fighter starts, they may change course (or keep it).
   coursePreview(walk = 'keep') {
     const p = this.prompt;
     if (!p || p.kind !== 'course') return null;
     const f = this.fighters[p.fighter];
+    const o = this.fighters[p.after];
+    const threat = o.windups.find((w) => w.eventId === p.threat);
+    const verdict = () => (!threat ? [] : [this.wouldCatch(o, threat) ? `Still inside ${threat.label} when it lands` : `Out of ${threat.label} when it lands`]);
     if (!walk || walk === 'keep') {
-      return { enabled: true, reason: '', delay: 0, lines: [`${f.walk ? `Keep walking ${this.walkText(f)}` : 'Keep standing'} · no cost`], path: f.walk ? this.coursePath(f, f.walk) : null };
+      return { enabled: true, reason: '', delay: 0, lines: [`${f.walk ? `Keep walking ${this.walkText(f)}` : 'Keep standing'} · no cost`, ...verdict()], path: f.walk ? this.coursePath(f, f.walk) : null };
     }
     const r = this.walkOrder(f, walk);
     if (r.error) return { enabled: false, reason: r.error, delay: 0, lines: [] };
@@ -1367,6 +1368,7 @@ export class Game {
       const arr = r.walk ? this.arrival(f) : null;
       const lines = [`${r.walk ? `Walk ${this.walkText(f, r.walk)} at ${this.paceText(this.paceAt(f, this.time))} pace` : 'Stop walking'} · next turn ${fmt(d)} later (t=${fmt(next)})`];
       if (arr != null && r.walk.to) lines.push(`Arrives t=${fmt(arr)}`);
+      lines.push(...verdict());
       if (f.pending) lines.push('Drops the strike you were waiting to start');
       if (this.leavesClose(f, next)) lines.push(`Leaving Close: ${this.opponent(f).name} may strike you as you go`);
       return { enabled: true, reason: '', delay: d, next, lines, walk: r.walk, path: this.coursePath(f, r.walk) };
@@ -1824,6 +1826,8 @@ export class Game {
       const frac = Math.max(0, (p.end - this.time) / (p.end - p.start));
       const kept = p.madra * frac;
       f.madra = Math.min(f.stats.pool, f.madra + kept);
+      // Madra that comes back was never spent, so it feeds nothing.
+      for (const w of f.windups) if (w !== p && w.boostPerMadra) w.boost = Math.max(0, w.boost - kept * w.boostPerMadra);
       const lost = `${fmt(p.madra - kept)} madra lost${kept > 0 ? `, ${fmt(kept)} kept` : ''}`;
       if (this.isEnforcedStrike(p)) {
         const ev = this.events.find((e) => e.id === p.eventId);

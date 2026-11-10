@@ -26,9 +26,9 @@ Walking out of Close range of the opponent lets them strike you as you go, whene
 
 ## Movement
 
-Walking runs alongside everything else. On your turn you pick an action and where to walk, and you keep walking while the action plays out. Your next turn comes when the action says, not when you arrive.
+Walking is a standing order that runs alongside everything else. On your turn you pick an action and, if you like, a new order; you keep following it while the action plays out and after, until you change it. Walking never takes a turn of its own: to just walk, give the order and wait.
 
-- **Where to:** a spot (the shortest route there, around obstacles); toward the opponent, following them as they move and stopping 1.5 m away; away, straight back up to 6.5 m (from the start, just past the Far edge), stopping short of anything in the way; stop where you are; or keep your course.
+- **Orders:** close in (follow the opponent, stopping 1.5 m away); hold a distance (keep that many metres from the opponent wherever they go: closing if they're farther, backing off if they're nearer); go to a spot (the shortest route there, around obstacles); or stop. Backing off goes straight back, or along whatever is in the way while that still opens the gap. Cornered, you stay put.
 - **Pace:** 2 m per tick at Speed 100, × (Speed / 100)² like other physical actions, × how much the action leaves you free to move. With several things going at once, the slowest counts.
 
 | Doing | Pace |
@@ -38,9 +38,8 @@ Walking runs alongside everything else. On your turn you pick an action and wher
 | Forger and Ruler techniques | ⅓ |
 
 - **Building while you walk:** techniques that build while you act (Ruler techniques, barriers, Crown stars) hold you to ⅓ until your next turn comes, then ⅔ for the rest of the build.
-- **Move:** walking with nothing else to do. Your next turn comes when you'd arrive, as things stand when you set off (at most 10 ticks).
 - **Strike when in reach:** a strike chosen out of reach follows the opponent and starts on its own at the first moment it would land in reach, given where everyone is headed. Once started it's committed: backing off far enough makes it land short. If it hasn't started after 6 ticks you give up and your next turn comes.
-- **Changing course** is free on your turn. You can also change it as a reaction: when the opponent takes a turn (anything but a wait that keeps their course), and when you react to an attack. A reaction change pushes your next turn 0.5 ticks later (a physical action, so it shrinks with Speed) and drops a strike waiting to start. It doesn't give the opponent a reaction of their own.
+- **Changing your order** is free on your turn. You can also change it as a reaction: when the opponent starts an area that would catch you as things stand, and when you react to an attack. A reaction change pushes your next turn 0.5 ticks later (a physical action, so it shrinks with Speed) and drops a strike waiting to start. It doesn't give the opponent a reaction of their own.
 - **Sidestep:** a dodge against an area attack moves you up to 2 m (more if you're fast) straight out from its centre, and stops your walk there.
 - **Positions are continuous.** Attacks and range checks use where everyone is at that moment.
 - **Fighters don't block each other.** Only obstacles and the arena walls block movement.
@@ -63,7 +62,7 @@ Where the centre goes depends on the technique's aim:
 - **Around you:** centred on the attacker, wherever they are when it lands. Endless Sword and Void Dragon's Dance work this way.
 - **Set at a point:** you pick a spot within the technique's reach that you can see. It forms there however anyone moves afterwards, so the opponent can get out before it lands.
 
-The defender can walk out (changing course on their turn, or as a reaction when it starts), sidestep at the last moment (a dodge), or block. Madra Pulse is a burst around you that reaches Close range.
+The defender can walk out (a new order on their turn, or as a reaction when it starts), sidestep at the last moment (a dodge), or block. Madra Pulse is a burst around you that reaches Close range.
 
 ### Lines
 

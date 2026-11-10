@@ -1,6 +1,6 @@
 # Paths
 
-Techniques follow the shared rules and scaling in techniques.md. Numbers are for a typical fighter in units of their own stage (Channel cap 15). Damage is shown at 6 / 10 / 15 madra unless noted.
+Techniques follow the shared rules and scaling in techniques.md. Numbers are for a typical fighter in units of their own stage (Channel cap 15). Damage is shown at 6 / 10 / 15 madra unless noted. A wind-up of "÷ 4" is the divisor in the wind-up rule: madra ÷ 4 at 15 madra, quicker than that below it and slower above.
 
 Every fighter can also strike, dodge, block, and move, whatever their Path.
 
@@ -12,9 +12,9 @@ Fire and destruction madra. Black Flame hits harder for its madra than anything 
 
 | Technique | Type | Madra | Wind-up | Effect |
 | --- | --- | --- | --- | --- |
-| Dragon's Breath | Striker | Any, up to channel cap | Madra ÷ 4 | A beam of black fire. 11 / 20 / 33 damage. +1 to hit. Any range; best at Mid |
+| Dragon's Breath | Striker | Any, up to channel cap | ÷ 4 | A beam of black fire. 11 / 20 / 33 damage. +1 to hit. Any range; best at Mid |
 | Burning Cloak | Enforcer stance | 6 to raise | 1 | Speed ×1.5 and +5 physical damage. Upkeep 5 madra per tick |
-| Void Dragon's Dance | Ruler | Any amount: no channel cap | Madra ÷ 2 | A finisher: a long build-up, then one blast of black fire over a wide area. As a Ruler technique, you keep acting while it builds. Area attack centred on you, no roll: the aura around you ignites, hitting everything within 4 m + 0.5 m per madra (up to 14 m), behind cover or not. 21 / 43 / 64 damage at 12 / 20 / 30 madra (wind-ups of about 5, 8.5 and 13 ticks). Boosted by fire and destruction in the area: +1 damage for every point of Black Flame madra spent while it winds up |
+| Void Dragon's Dance | Ruler | Any, up to twice channel cap | ÷ 2 | A finisher: a long build-up, then one blast of black fire over a wide area. As a Ruler technique, you keep acting while it builds. Area attack centred on you, no roll: the aura around you ignites, hitting everything within 4 m + 0.5 m per madra (up to 14 m), behind cover or not. 21 / 43 / 64 damage at 12 / 20 / 30 madra (wind-ups of about 4.5, 10 and 18 ticks). Boosted by fire and destruction in the area: +0.5 damage for every point of Black Flame madra spent while it winds up |
 
 **Learning the Path:** Dragon's Breath, Burning Cloak and Void Dragon's Dance are core (free).
 
@@ -30,13 +30,13 @@ Sword madra. Sword aura cuts, so it slips past toughness, and the Path's signatu
 
 | Technique | Type | Madra | Wind-up | Effect |
 | --- | --- | --- | --- | --- |
-| Endless Sword | Striker / Ruler | 1.5 per point of power; what's spent fits the channel cap (power 10 for 15 madra at a typical cap) | Power ÷ 6 | Fast: the sword aura around you resonates, slashing everything within 4 m + 0.5 m per point of power of you (up to 14 m), constructs included; cover doesn't shelter from it. 6 / 11 damage to each target at power 6 / 10. Area attack: no roll. Each target is hit once more for every other blade close to it: an opponent's weapon, a Forged sword, a blade on the ground. Your own weapon doesn't count; it's what makes the others resonate |
-| Rippling Sword | Striker | Any, up to channel cap | Madra ÷ 4 | A strike whose edge extends into a wave of sword aura. 10 + madra × efficiency: 18 / 25 / 36. Any range; best within 10 m |
+| Endless Sword | Striker / Ruler | 1.5 per point of power; what's spent fits the channel cap (power 10 for 15 madra at a typical cap) | Power ÷ 4 | The sword aura around you resonates, slashing everything within 4 m + 0.5 m per point of power of you (up to 14 m), constructs included; cover doesn't shelter from it. 6 / 11 damage to each target at power 6 / 10. Area attack: no roll. Each target is hit once more for every other blade close to it: an opponent's weapon, a Forged sword, a blade on the ground. Your own weapon doesn't count; it's what makes the others resonate |
+| Rippling Sword | Striker | Any, up to channel cap | ÷ 4 | A wave of sword aura thrown off the edge of a blade. 8 / 15 / 26 damage. Any range; best within 10 m |
 | Flowing Sword | Enforcer stance | 4 to raise | 1 | Builds up while held, with no limit: every 5 ticks, +10% Speed and +1 sharpness. Upkeep starts at 1 madra per 2 ticks and rises by 0.1 madra per tick with each build-up, so the pool is what eventually stops it. A hit of twice your interrupt threshold breaks it, like any stance: it drops and all build-up is lost |
 
 **Learning the Path:** Endless Sword, Rippling Sword and Flowing Sword are core (free).
 
-**How you win:** sharpness cuts through Toughness, so tough fighters lose their edge. Flowing Sword makes you faster and sharper the longer the fight goes, as long as you aren't hit hard. Endless Sword is an area attack, so even the fastest opponent can't dodge it, and every extra blade on the field adds another hit: armed opponents, sword constructs, and blades left lying around.
+**How you win:** sharpness cuts through Toughness, so tough fighters lose their edge and small, quick techniques keep their bite: this is the Path for pressing. Flowing Sword makes you faster and sharper the longer the fight goes, as long as you aren't hit hard. Endless Sword is an area attack, so even the fastest opponent can't dodge it, and every extra blade on the field adds another hit: armed opponents, sword constructs, and blades left lying around.
 
 **How you lose:** no Guard techniques. A fighter who stays at long range, or who is fast enough to dodge anyway, makes you pay full price for every swing. One solid hit breaks Flowing Sword, so an opponent who lands early keeps you from ever building up.
 
@@ -48,11 +48,11 @@ Pure madra, built for taking techniques apart: it strips stances and constructs,
 
 | Technique | Type | Madra | Wind-up | Effect |
 | --- | --- | --- | --- | --- |
-| Hollow King's Spear | Striker | Any, up to channel cap | Madra ÷ 4 | Hyper-compressed pure madra. Spiritual, 0.85× damage: 7 / 13 / 22 before reduction. +1 to hit. Any range; best within 10 m |
+| Hollow King's Spear | Striker | Any, up to channel cap | ÷ 4 | Hyper-compressed pure madra. Spiritual, 0.85× damage: 7 / 13 / 22 before reduction. +1 to hit. Any range; best within 10 m |
 | Hollow Armor | Enforcer stance | 5 to raise | 1 | Halves technique and spiritual damage; no help against physical hits. Upkeep 1 madra per tick |
-| Crown of the Hollow King | Forger | Any per star, up to channel cap | Madra ÷ 2 per star | Two uses. **Forge a star:** the madra you put in sets the star's size; it forms 14 m over your head after madra ÷ 2 ticks, but your next turn comes after 1.5 ticks, so you keep acting while it forms. Each star is its own construct with HP equal to its madra; nothing short-ranged reaches it, and obstacles don't shelter it. **Drop stars:** a quick action that drops any number of forged stars, biggest first. They land 0.5 ticks later as one attack with a hit per star, and your next turn comes then. The defender reacts once, and one block soaks across all of them. Each hit is rolled, spiritual, 2 × the star's madra before reduction, +1 to hit, at any range; spiritual hits count double against the threshold, so a decent star breaks wind-ups |
+| Crown of the Hollow King | Forger | Any per star, up to channel cap | ÷ 2 per star | Two uses. **Forge a star:** the madra you put in sets the star's size; it forms 14 m over your head over its wind-up, but your next turn comes after 1.5 ticks, so you keep acting while it forms. Each star is its own construct with HP equal to its madra; nothing short-ranged reaches it, and obstacles don't shelter it. **Drop stars:** a quick action that drops any number of forged stars, biggest first. They land 0.5 ticks later as one attack with a hit per star, and your next turn comes then. The defender reacts once, and one block soaks across all of them. Each hit is rolled, spiritual, 2 × the star's madra before reduction, +1 to hit, at any range; spiritual hits count double against the threshold, so a decent star breaks wind-ups |
 | Hollow King's Mantle | Striker stance | 5 to raise | 1 | While it is up, you can catch an incoming non-area technique and throw it back at its owner for half the madra that went into it. It lands on them 1 tick later. Doesn't work on physical hits or Crown stars. Upkeep 1 madra per tick |
-| Madra Pulse | Striker / Ruler | 2 or more, up to channel cap | Madra ÷ 6 | A wash of pure madra at Close range only. It cancels each of your opponent's wind-ups, stances and constructs there that cost at most half the madra put in: a wind-up by the madra in it, a stance by its raise cost, a construct by its madra (a barrier's is half its HP). The opponent can block it: each madra of block takes 1.5 off its strength. No damage, no roll |
+| Madra Pulse | Striker / Ruler | 2 or more, up to channel cap | ÷ 6 | A wash of pure madra at Close range only. It cancels each of your opponent's wind-ups, stances and constructs there that cost at most half the madra put in: a wind-up by the madra in it, a stance by its raise cost, a construct by its madra (a barrier's is half its HP). The opponent can block it: each madra of block takes 1 off its strength. No damage, no roll |
 
 **Learning the Path:** Hollow King's Spear, Hollow Armor and the Crown are core (free). The Mantle costs 1 point; Madra Pulse costs 2.
 
@@ -69,7 +69,7 @@ Force madra and Oathsign script circles. It holds ground behind barriers and an 
 | Technique | Type | Madra | Wind-up | Effect |
 | --- | --- | --- | --- | --- |
 | Stone Anchor | Enforcer stance | 5 to raise | 1 | +6 damage reduction against physical and technique hits, and your stances take 50% more to break (24 at Control 5). Upkeep 0.5 madra per tick |
-| Oathsign: Barrier | Forger | Any, up to channel cap | Madra ÷ 3 | A script-circle shield with HP of 2 × madra, filling in as it builds while you keep acting. It soaks the physical and technique damage that gets through your reduction; spiritual hits pass through. Casting again adds to it |
+| Oathsign: Barrier | Forger | Any, up to channel cap | ÷ 3 | A script-circle shield with HP of 2 × madra, filling in as it builds while you keep acting. It soaks the physical and technique damage that gets through your reduction; spiritual hits pass through. Casting again adds to it |
 | Oathsign: Accelerate | Forger | 6 | 2 | A script ring Forged around you: +10 Speed and +1 melee damage while it lasts. Rings stack. Your next turn comes when it forms. Each ring is a 6-HP construct sitting on you, so it can be targeted, area attacks hit it, and Madra Pulse cancels it |
 | Oathsign: Launch | Forger | 4 | 0.5 travel | A ring flings you up to 7 m in any direction in a straight line, in 0.5 ticks; your next turn comes 1 tick after you land |
 | Oathsign: Seal | Forger | 10 | 2 | A script circle Forged on your opponent. Rolled disruption: if it hits, it breaks all their wind-ups and stances. Any range; best within 10 m |
@@ -88,8 +88,8 @@ Venom madra from the Desolate Wilds: acid-green and corrosive. A bandit sect's P
 
 | Technique | Type | Madra | Wind-up | Effect |
 | --- | --- | --- | --- | --- |
-| Venom Needles | Striker | Any, up to channel cap | Madra ÷ 4 | A spray of finger-length needles of venom madra. Any range; best within 10 m |
-| Paralytic Cloud | Ruler (zone) | Any amount: no channel cap | Madra ÷ 2 | Toxic gas set at a spot within 10 m that you can see. It settles there (3 m + 0.25 m per madra) and fills the space (cover doesn't help) for 8 ticks, pulsing when it forms and every 4 ticks: an opponent inside is slowed by 2% Speed per madra (up to 50%) and takes a little damage each pulse. As a Ruler technique, you keep acting while it builds |
+| Venom Needles | Striker | Any, up to channel cap | ÷ 4 | A spray of finger-length needles of venom madra. Any range; best within 10 m |
+| Paralytic Cloud | Ruler (zone) | Any, up to twice channel cap | ÷ 2 | Toxic gas set at a spot within 10 m that you can see. It settles there (3 m + 0.25 m per madra) and fills the space (cover doesn't help) for 8 ticks, pulsing when it forms and every 4 ticks: an opponent inside is slowed by 2% Speed per madra (up to 50%) and takes a little damage each pulse. As a Ruler technique, you keep acting while it builds |
 
 **Learning the Path:** both techniques are core (free).
 
@@ -103,8 +103,8 @@ Light madra drawn from Samara's Ring above the peak of Mount Samara: burning gol
 
 | Technique | Type | Madra | Wind-up | Effect |
 | --- | --- | --- | --- | --- |
-| Heaven's Lance | Striker (line) | Any, up to channel cap | Madra ÷ 4 | A straight beam of burning golden light from where you stand toward a point you pick: 6 m + 1 m per madra long (up to 24 m), 1.5 m wide, stopping at the first obstacle. No roll: it hits everything in its path. Sidestep out of it, or block |
-| Wall of Golden Glass | Forger | Any, up to channel cap | Madra ÷ 3 | Panels of golden glass with HP of 2 × madra, filling in as they build while you keep acting. They soak the physical and technique damage that gets through your reduction; spiritual hits pass through |
+| Heaven's Lance | Striker (line) | Any, up to channel cap | ÷ 4 | A straight beam of burning golden light from where you stand toward a point you pick: 6 m + 1 m per madra long (up to 24 m), 1.5 m wide, stopping at the first obstacle. No roll: it hits everything in its path. Sidestep out of it, or block |
+| Wall of Golden Glass | Forger | Any, up to channel cap | ÷ 3 | Panels of golden glass with HP of 2 × madra, filling in as they build while you keep acting. They soak the physical and technique damage that gets through your reduction; spiritual hits pass through |
 
 **Learning the Path:** both techniques are core (free).
 
