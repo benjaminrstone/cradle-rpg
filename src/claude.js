@@ -91,7 +91,7 @@ export function waitingPanel(game) {
   }
   if (p.kind === 'course') {
     const after = game.fighters[p.after];
-    incoming = `<div class="incoming theme-${after.theme}">${after.name} has just acted: ${f.name} can change course.</div>`;
+    incoming = `<div class="incoming theme-${after.theme}">${after.name} has started an area that would catch ${f.name}: ${f.name} can walk out of it.</div>`;
   }
   const what = p.kind === 'reaction' ? 'reaction' : p.kind === 'course' ? 'choice of course' : 'move';
   const api = state.via === 'api' ? state.api : null;
@@ -329,8 +329,7 @@ function snapshot(game) {
     options = game.turnOptions(cur).map((o) => {
       const amount = o.slider ? o.slider.initial : 0;
       const pv = game.preview(cur, o.key, amount);
-      // Moves need a destination: show where heading straight toward or away would take you.
-      // Areas set at a point need a centre: show putting it on the opponent.
+      // A Launch needs somewhere to land, and an area set at a point needs a centre.
       const ways = o.point ? Object.fromEntries((o.point.area ? ['them'] : ['toward', 'away']).map((w) => {
         const wp = game.preview(cur, o.key, amount, w);
         return [w, { enabled: wp.enabled, reason: wp.reason, preview: wp.lines.filter(Boolean) }];
@@ -373,7 +372,7 @@ function snapshot(game) {
   if (p && p.kind === 'course') {
     const f = game.fighters[p.fighter];
     const after = game.fighters[p.after];
-    const ways = Object.fromEntries(['keep', 'toward', 'away', 'stop'].map((w) => {
+    const ways = Object.fromEntries(['keep', 'toward', 'hold:10', 'hold:20', 'stop'].map((w) => {
       const c = game.coursePreview(w);
       return [w, { enabled: c.enabled, reason: c.reason, preview: c.lines }];
     }));

@@ -72,13 +72,13 @@ export const PATHS = {
     techniques: [
       {
         id: 'endlessSword', name: 'Endless Sword', kind: 'attack', type: 'Striker / Ruler',
-        divisor: 6, costMult: 1.5, toHit: 0, ranges: [0, 1], area: true, radius: 4, radiusPerMadra: 0.5, bladeHits: true, fills: true,
-        desc: 'A fast area attack centred on you, no roll: the sword aura around you resonates, slashing everything within 4 m + 0.5 m per point of power of you (up to 14 m), constructs included, behind cover or not. One extra hit per other blade close to the target. Wind-up madra ÷ 6, but it costs 1.5 madra per point of power.',
+        divisor: 4, costMult: 1.5, toHit: 0, ranges: [0, 1], area: true, radius: 4, radiusPerMadra: 0.5, bladeHits: true, fills: true,
+        desc: 'An area attack centred on you, no roll: the sword aura around you resonates, slashing everything within 4 m + 0.5 m per point of power of you (up to 14 m), constructs included, behind cover or not. One extra hit per other blade close to the target. It costs 1.5 madra per point of power.',
       },
       {
         id: 'ripplingSword', name: 'Rippling Sword', kind: 'attack', type: 'Striker',
-        divisor: 4, toHit: 0, ranges: [0, 1, 2], bestRange: 1, base: 10, physical: true,
-        desc: 'A strike whose edge extends into a wave of sword aura. Any range; best within 10 m.',
+        divisor: 4, toHit: 0, ranges: [0, 1, 2], bestRange: 1,
+        desc: 'A wave of sword aura thrown off the edge of a blade. Any range; best within 10 m.',
       },
       {
         id: 'flowingSword', name: 'Flowing Sword', kind: 'stance', type: 'Enforcer stance',
@@ -109,7 +109,7 @@ export const PATHS = {
         id: 'crown', name: 'Crown of the Hollow King', label: 'Forge a star', card: 'crown', kind: 'forge', type: 'Forger',
         divisor: 2,
         cardDesc: 'Forge stars high over your head, then drop them when the timing is right. Each star is its own construct with HP equal to its madra.',
-        desc: 'Forge one star for the Crown of the Hollow King, 14 m over your head, above every obstacle. The madra you put in sets its size; it takes madra ÷ 2 ticks to form, but your next turn comes after 1.5 ticks. Each star is its own construct with HP equal to its madra.',
+        desc: 'Forge one star for the Crown of the Hollow King, 14 m over your head, above every obstacle. The madra you put in sets its size; it takes a while to form (wind-up ÷ 2), but your next turn comes after 1.5 ticks. Each star is its own construct with HP equal to its madra.',
       },
       {
         id: 'dropStars', name: 'Crown of the Hollow King', label: 'Drop stars', card: 'crown', kind: 'command', type: 'Forger',
@@ -228,25 +228,25 @@ export const FIGHTERS_RAW = [
   {
     id: 'lindon', name: 'Lindon', path: 'blackFlame', stage: 'Lowgold', theme: 'flame',
     // Black Flame and a Bloodforged Iron body; refined control, still learning to fight.
-    steps: { pool: 3, control: 2, perception: 1, toughness: 2, precision: -1, speed: -1 },
+    steps: { pool: 2, control: 2, toughness: 2, perception: 1, cap: 1, precision: -1, speed: -1 },
     traits: [], weapon: null,
   },
   {
     id: 'yerin', name: 'Yerin', path: 'endlessSword', stage: 'Lowgold', theme: 'sword',
     // The fastest and sharpest; fights with her blades rather than finesse.
-    steps: { precision: 4, speed: 1, perception: 1, toughness: 1, control: -1, pool: -1, spirit: -1 },
+    steps: { precision: 3, speed: 1, perception: 1, toughness: 1, control: -1, pool: -1, spirit: -1 },
     traits: ['swordArms'], weapon: { name: 'sword', blade: true, damage: 0 },
   },
   {
     id: 'eithan', name: 'Eithan', path: 'hollowKing', stage: 'Lowgold', theme: 'pure',
     // Sees everything and moves well; fragile, with little raw power.
-    steps: { perception: 5, pool: 5, speed: 1, precision: -1, cap: -1, toughness: -3, health: -2 },
+    steps: { perception: 3, pool: 3, speed: 1, precision: -1, cap: -1, toughness: -3, health: -2 },
     traits: [], weapon: { name: 'scissors', blade: true, damage: 0 },
   },
   {
     id: 'ziel', name: 'Ziel', path: 'dawnOath', stage: 'Lowgold', theme: 'force',
     // Hard to hurt; slow, with a damaged spirit.
-    steps: { toughness: 3, health: 3, control: -1, speed: -1, spirit: -1, pool: -1 },
+    steps: { toughness: 3, health: 2, precision: 1, control: -1, speed: -1, spirit: -1 },
     traits: [], weapon: { name: 'hammer', blade: false, damage: 4 },
   },
   {

@@ -26,9 +26,9 @@ export const RADIUS = 0.5;
 export const STAR_HEIGHT = 14;
 // Launch: the farthest a ring can fling you, enough to go from the start to Close or Far.
 export const LAUNCH_REACH = 7;
-// Where "toward" moves stop: this far from the opponent, well inside Close.
+// Closing in stops this far from the opponent, well inside Close.
 export const TOWARD_GAP = 1.5;
-// How far "away" moves go when nothing else limits them: from the start, just past the Far edge.
+// How far a Launch "away" goes when nothing else limits it.
 export const AWAY_STEP = 6.5;
 
 const EPS = 1e-6;
@@ -187,6 +187,22 @@ export function walkAlong(from, pts, s) {
     p = q;
   }
   return { p: { x: p.x, y: p.y }, rest: [] };
+}
+
+// Back s metres off from `from`: straight back if the way is clear, else along whatever is in
+// the way, as long as that still opens the gap. Cornered, you stay put.
+export function backOff(arena, p, from, s) {
+  const d = dist(p, from);
+  const base = d > EPS ? Math.atan2(p.y - from.y, p.x - from.x) : 0;
+  let best = null;
+  for (const turn of [0, 0.5, -0.5, 1, -1, 1.5, -1.5]) {
+    const q = { x: p.x + Math.cos(base + turn) * s, y: p.y + Math.sin(base + turn) * s };
+    if (!standable(arena, q) || !clearWalk(arena, p, q)) continue;
+    if (turn === 0) return q;
+    const gain = dist(q, from) - d;
+    if (gain > 1e-4 && (!best || gain > best.gain + 1e-9)) best = { q, gain };
+  }
+  return best ? best.q : p;
 }
 
 // The nearest spot a fighter can stand to p: p itself, or the closest found on rings around it.

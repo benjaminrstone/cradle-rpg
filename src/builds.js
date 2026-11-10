@@ -1,15 +1,17 @@
-// Character building (stats.md "Building a fighter", techniques.md "Building a technique set").
 // A build starts from a template fighter, then spends points on stat steps, extra Path
-// techniques and technique refinements. Saved builds live in the browser and can fight.
+// techniques and technique refinements. Saved builds live in the browser.
 import { FIGHTERS, TRAITS, STAT_STEP, statsFrom } from './data.js';
 import { getPath } from './paths.js';
 
-export const BUDGET = 6;
+export const BUDGET = 8;
 
 export { STAT_STEP };
-export const STAT_FLOOR = 3;            // steps down per stat (raising has no limit)
+export const STAT_FLOOR = 3;            // steps down per stat
 export const REFINE_UP_LIMIT = 3;       // steps up per technique
 export const REFINE_DOWN_LIMIT = 2;     // steps down per technique
+
+// Each step up costs one more than the last; each step down pays back 1.
+export const stepCost = (n) => (n > 0 ? (n * (n + 1)) / 2 : n);
 
 export const REFINEMENTS = {
   accuracy: { label: 'Accuracy', up: '+1 to hit', down: '−1 to hit' },
@@ -20,7 +22,6 @@ export const REFINEMENTS = {
   size: { label: 'Size', up: '+25% HP', down: '−25% HP' },
 };
 
-// Which refinements make sense for each kind of technique.
 const REFINE_BY_KIND = {
   attack: ['accuracy', 'power', 'quickness', 'reach'],
   stance: ['quickness', 'economy'],
@@ -56,9 +57,8 @@ export function newBuild(templateId) {
 // ---------- costs ----------
 export function statCost(build, stat) {
   const n = build.steps[stat] || 0;
-  if (n <= 0) return n; // each step down pays back 1
-  const free = getPath(build.path).signatureStat === stat ? 1 : 0;
-  return n - free; // every step up costs 1
+  const free = n > 0 && getPath(build.path).signatureStat === stat ? 1 : 0;
+  return stepCost(n) - free;
 }
 
 export function refineSteps(build, techId) {
@@ -68,8 +68,7 @@ export function refineSteps(build, techId) {
 }
 
 export function refineCost(build, techId) {
-  const { up, down } = refineSteps(build, techId);
-  return up - down;
+  return Object.values(build.refine[techId] || {}).reduce((sum, n) => sum + stepCost(n), 0);
 }
 
 export const weaponCost = (w) => Math.ceil(((w && w.damage) || 0) / 2);
@@ -84,7 +83,6 @@ export function costs(build) {
   return { stats, techs, refine, gear, total, budget: BUDGET, left: BUDGET - total };
 }
 
-// ---------- the fighter a build makes ----------
 // The techniques a build knows: its Path's core ones plus the ones it paid for.
 export function known(build) {
   return getPath(build.path).techniques.filter((t) => isCore(t) || build.learned.includes(t.id));
