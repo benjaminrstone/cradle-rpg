@@ -155,20 +155,6 @@ export function pathLength(from, pts) {
   return len;
 }
 
-export function along(from, pts, s) {
-  let p = from;
-  for (const q of pts) {
-    const d = dist(p, q);
-    if (s <= d) {
-      const k = d > 0 ? s / d : 0;
-      return { x: p.x + (q.x - p.x) * k, y: p.y + (q.y - p.y) * k };
-    }
-    s -= d;
-    p = q;
-  }
-  return { x: p.x, y: p.y };
-}
-
 // Walk s metres along the path from `from` through pts: where you get to, and the points still ahead.
 export function walkAlong(from, pts, s) {
   let p = from;
