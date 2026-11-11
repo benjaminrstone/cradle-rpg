@@ -326,7 +326,7 @@ function drawHoverAt(arena) {
   if (view.flight) {
     const gap = A.dist(plan.dest, game.pos(game.opponent(f), game.time + view.flight.travel));
     tip.textContent = `${fmt(plan.length)} m · lands in ${fmt(view.flight.travel)} · ${RANGES[A.bandOf(gap)]} (${fmt(gap)} m)`;
-  } else tip.textContent = `${fmt(plan.length)} m · click to walk here`;
+  } else tip.textContent = `${fmt(plan.length)} m · click to move here`;
   const g = svg('g', { class: `theme-${f.theme}` });
   hoverValue = A.pointText(view.hoverAt);
   g.appendChild(svg('polyline', { class: 'route hover-route', points: points(plan.from, plan.path) }));
@@ -394,7 +394,7 @@ export function renderField(game, opts = {}) {
     g.appendChild(svg('polyline', { class: 'route', points: points(r.from, r.path) }));
     const end = r.path[r.path.length - 1];
     g.appendChild(svg('circle', { class: 'spot', cx: end.x, cy: end.y }));
-    g.appendChild(svg('title')).textContent = `${f.name}: ${f.flight ? 'flying' : `walking ${game.walkText(f)}`}${arr != null ? `, arrives t=${fmt(arr)}` : ''}`;
+    g.appendChild(svg('title')).textContent = `${f.name}: ${f.flight ? 'flying' : `moving ${game.walkText(f)}`}${arr != null ? `, arrives t=${fmt(arr)}` : ''}`;
     return g;
   }));
 

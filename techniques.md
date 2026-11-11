@@ -36,8 +36,8 @@ Numbers are for a typical fighter in units of their own stage (see stats.md): He
 
 Everyone can strike, dodge, block, move, and wait. The rest come from a fighter's Path.
 
-- **Walking** is a standing order that goes alongside every action: close in, hold a distance, go to a spot, or stop, at a pace the action allows (full for physical actions and stances, ⅔ for Striker techniques, ⅓ for Forger and Ruler ones). It never takes a turn (battlefield.md).
-- **Wait:** pass for as many ticks as you choose. To just walk, give the order and wait.
+- **Moving** is a standing order that goes alongside every action: close in, hold a distance, go to a spot, or stay in place, at a pace the action allows (full for physical actions and stances, ⅔ for Striker techniques, ⅓ for Forger and Ruler ones). It never takes a turn (battlefield.md).
+- **Wait:** pass for as many ticks as you choose. To just move, give the order and wait.
 
 | Template | Type | Role | Madra | Wind-up | Damage | Notes |
 | --- | --- | --- | --- | --- | --- | --- |

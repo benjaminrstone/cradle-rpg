@@ -73,7 +73,7 @@ def fighter_line(f):
     w = f.get("walk")
     if w:
         arr = f", arrives t={w['arrives']}" if w.get("arrives") not in (None, -1) else ""
-        lines.append(f"    walking {w['course']} at {w['pace']} pace{arr}")
+        lines.append(f"    moving {w['course']} at {w['pace']} pace{arr}")
     if f.get("flight"):
         to = f["flight"]["to"]
         lines.append(f"    flying to ({to['x']}, {to['y']}), lands t={f['flight']['lands']}")
@@ -175,7 +175,7 @@ def describe(s, served_version=None):
     if s.get("opportunity"):
         op = s["opportunity"]
         st = op["strike"]
-        out.append(f"{op['mover']} is walking out of Close range. Strike as they go? Lands at once: {pct(st['chance'])} to hit, {st['damage']} damage;"
+        out.append(f"{op['mover']} is moving out of Close range. Strike as they go? Lands at once: {pct(st['chance'])} to hit, {st['damage']} damage;"
                    f" your next turn comes {st['delay']} later{' (breaks their wind-ups)' if st['interrupts'] else ''}.")
         out.append("  strike / let")
     return "\n".join(out)
@@ -185,15 +185,15 @@ def describe(s, served_version=None):
 
 INSTRUCTIONS = """You are playing Cradle Duel, a dueling game set in Will Wight's Cradle, against a human. You control one fighter; play to win.
 
-Each time your fighter has a decision, you get the board as text: both fighters, the shared initiative queue, the recent log, and what you're deciding: your options (on your turn), an incoming attack (a reaction), a chance to walk out of an area the opponent has just started, or a chance to strike an opponent leaving Close range. The numbers on the board and in each option's preview come from the game itself; trust them over anything in the design docs below. The docs explain the rules and the thinking behind them.
+Each time your fighter has a decision, you get the board as text: both fighters, the shared initiative queue, the recent log, and what you're deciding: your options (on your turn), an incoming attack (a reaction), a chance to move out of an area the opponent has just started, or a chance to strike an opponent leaving Close range. The numbers on the board and in each option's preview come from the game itself; trust them over anything in the design docs below. The docs explain the rules and the thinking behind them.
 
 Answer every decision by calling make_move once. Each action has a key, an amount, a target and a walk:
 - On your turn, the key is an option key from the Options list. amount is the slider value (e.g. madra to commit) when the option has a slider, else 0.
 - target is for options that need one, and is what follows "@" on the board without the "@": a construct id ("c12"), a spot on the arena as "x:y" in metres ("12.5:8"), "toward" / "away" for a Launch, or "them" to aim an area at the opponent (a circle's centre, or a beam's direction). Leave it "" when there's nothing to aim.
-- walk is your standing order for walking, which goes on while you do anything else and until you change it: "keep" (the order you already have), "stop", "toward" (close in: follow the opponent, stopping 1.5 m away), "hold:N" (keep N metres from the opponent wherever they go, closing or backing off as needed, e.g. "hold:10"), or a spot "x:y". Each option's preview assumes "keep". To just walk, give the order with a wait. A strike chosen out of reach closes in and starts once it would land in reach.
+- walk is your move order, which goes on while you do anything else and until you change it: "keep" (the order you already have), "stop", "toward" (close in: follow the opponent, stopping 1.5 m away), "hold:N" (keep N metres from the opponent wherever they go, closing or backing off as needed, e.g. "hold:10"), or a spot "x:y". Each option's preview assumes "keep". To just move, give the order with a wait. A strike chosen out of reach closes in and starts once it would land in reach.
 - In a reaction, the key is take, dodge, block (amount N), dodgeBlock (amount N), or redirect when it's shown; walk can change course at the same time (it pushes your next turn later).
 - When the opponent starts an area that would catch you, you may change course: key "keep", or key "course" with the new walk.
-- When the opponent walks out of Close range, you get the chance to strike as they go: the key is strike or let.
+- When the opponent moves out of Close range, you get the chance to strike as they go: the key is strike or let.
 - You can send several actions in order, e.g. dropping a stance ("drop:burningCloak") and then striking.
 - offerDraw or withdrawDraw can go alongside any move. A draw happens only when both sides offer.
 
@@ -223,7 +223,7 @@ MOVE_TOOL = {
                         "key": {"type": "string", "description": "An option key, a reaction (take, dodge, block, dodgeBlock, redirect), keep or course, strike or let, offerDraw or withdrawDraw."},
                         "amount": {"type": "number", "description": "Slider value or block size; 0 when there is none."},
                         "target": {"type": "string", "description": "Construct id, \"x:y\", toward or away (Launch), them, or \"\"."},
-                        "walk": {"type": "string", "description": "Standing order for walking: keep, stop, toward, hold:N, or \"x:y\"."},
+                        "walk": {"type": "string", "description": "Move order: keep, stop, toward, hold:N, or \"x:y\"."},
                     },
                 },
             },
