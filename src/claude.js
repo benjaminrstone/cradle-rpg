@@ -89,7 +89,7 @@ export function waitingPanel(game) {
   }
   if (p.kind === 'course') {
     const after = game.fighters[p.after];
-    incoming = `<div class="incoming theme-${after.theme}">${after.name} has started an area that would catch ${f.name}: ${f.name} can walk out of it.</div>`;
+    incoming = `<div class="incoming theme-${after.theme}">${after.name} has started an area that would catch ${f.name}: ${f.name} can move out of it.</div>`;
   }
   const what = p.kind === 'reaction' ? 'reaction' : p.kind === 'course' ? 'choice of course' : 'move';
   const api = state.via === 'api' ? state.api : null;
@@ -376,7 +376,7 @@ function snapshot(game) {
     course = {
       after: after.name,
       did: game.log.filter((l) => l.who === after.index && Math.abs(l.time - game.time) < 1e-9).map((l) => l.text),
-      now: f.walk ? `walking ${game.walkText(f)}` : 'standing',
+      now: f.walk ? `moving ${game.walkText(f)}` : 'staying in place',
       delay: r1(game.courseDelay(f)),
       ways,
     };

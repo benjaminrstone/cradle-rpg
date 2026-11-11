@@ -115,7 +115,7 @@ export const PLANS = {
       lines: [head,
         `To (${fmt(plan.dest.x)}, ${fmt(plan.dest.y)}): ${fmt(plan.length)} m · lands t=${fmt(land)} · next turn in ${fmt(t.travel + t.recovery)}`,
         `${o.name} will be ${fmt(gap)} m away (${R.RANGES[A.bandOf(gap)]})${o.walk || o.flight ? ' counting their course' : ''}`,
-        'Ends your walk: you stand where you land'],
+        'Ends your move order: you stand where you land'],
       cost: t.fixedCost,
       nextTurn: g.time + t.travel + t.recovery,
       queue: [{ time: land, label: `lands (${fmt(plan.length)} m)`, type: 'move' }, TURN],

@@ -52,7 +52,7 @@ Two tracks, and running out of either loses the fight. Spirit is separate from t
 
 ## Range and movement
 
-Fights happen on a battlemap. Walking is a standing order (close in, hold a distance, go to a spot) that runs alongside every action, so it never costs a turn; the game stops for it only when an area is about to catch you. Movement techniques are the fast exceptions.
+Fights happen on a battlemap. Moving is a standing order (close in, hold a distance, go to a spot) that runs alongside every action, so it never costs a turn; the game stops for it only when an area is about to catch you. Movement techniques are the fast exceptions.
 
 ## Legibility
 

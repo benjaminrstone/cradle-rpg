@@ -306,7 +306,7 @@ export class Game {
     if (hold) return { walk: { hold: Math.min(HOLD_MAX, Math.max(A.TOWARD_GAP, Number(hold[1]))) } };
     const from = this.pos(f);
     const dest = typeof walk === 'string' ? A.parsePoint(walk) : walk;
-    if (!dest) return { error: 'Choose where to walk: click the field' };
+    if (!dest) return { error: 'Choose where to move: click the field' };
     if (!A.standable(this.arena, dest)) return { error: "Can't stand there" };
     if (A.dist(from, dest) < 0.05) return { walk: null };
     if (!A.route(this.arena, from, dest)) return { error: 'No way through' };
@@ -978,8 +978,8 @@ export class Game {
       const arr = this.arrival(f, R.TIMING.waitMax);
       const here = !h.walk.to && this.holding(h.walk, this.gap());
       lines.push(here ? `Keeping ${this.walkText(f, h.walk).replace(/^to(ward)? /, (m, w) => (w ? 'next to ' : ''))}`
-        : `Walking ${this.walkText(f, h.walk)} at ${this.paceText(this.paceAt(f, this.time))} pace (${fmt(this.walkRate(f, this.time, f.pos))} m per tick now)${arr != null ? ` · arrives t=${fmt(arr)}` : ''}`);
-    } else if (f.walk && !h.flight) lines.push('Stops walking');
+        : `Moving ${this.walkText(f, h.walk)} at ${this.paceText(this.paceAt(f, this.time))} pace (${fmt(this.walkRate(f, this.time, f.pos))} m per tick now)${arr != null ? ` · arrives t=${fmt(arr)}` : ''}`);
+    } else if (f.walk && !h.flight) lines.push('Stays in place');
     if (p.nextTurn != null && (h.walk || o.walk) && !h.flight) {
       const gap = A.dist(this.pos(f, p.nextTurn), this.pos(o, p.nextTurn));
       if (Math.abs(gap - this.gap()) > 0.05) lines.push(`${fmt(gap)} m apart (${R.RANGES[A.bandOf(gap)]}) at your next turn`);
@@ -1288,7 +1288,7 @@ export class Game {
     const threat = o.windups.find((w) => w.eventId === p.threat);
     const verdict = () => (!threat ? [] : [this.wouldCatch(o, threat) ? `Still inside ${threat.label} when it lands` : `Out of ${threat.label} when it lands`]);
     if (!walk || walk === 'keep') {
-      return { enabled: true, reason: '', delay: 0, lines: [`${f.walk ? `Keep walking ${this.walkText(f)}` : 'Keep standing'} · no cost`, ...verdict()], path: f.walk ? this.coursePath(f, f.walk) : null };
+      return { enabled: true, reason: '', delay: 0, lines: [`${f.walk ? `Keep moving ${this.walkText(f)}` : 'Stay in place'} · no cost`, ...verdict()], path: f.walk ? this.coursePath(f, f.walk) : null };
     }
     const r = this.walkOrder(f, walk);
     if (r.error) return { enabled: false, reason: r.error, delay: 0, lines: [] };
@@ -1298,7 +1298,7 @@ export class Game {
     try {
       const next = (f.pending ? Math.min(f.nextTurn, this.time) : f.nextTurn) + d;
       const arr = r.walk ? this.arrival(f) : null;
-      const lines = [`${r.walk ? `Walk ${this.walkText(f, r.walk)} at ${this.paceText(this.paceAt(f, this.time))} pace` : 'Stop walking'} · next turn ${fmt(d)} later (t=${fmt(next)})`];
+      const lines = [`${r.walk ? `Move ${this.walkText(f, r.walk)} at ${this.paceText(this.paceAt(f, this.time))} pace` : 'Stay in place'} · next turn ${fmt(d)} later (t=${fmt(next)})`];
       if (arr != null && r.walk.to) lines.push(`Arrives t=${fmt(arr)}`);
       lines.push(...verdict());
       if (f.pending) lines.push('Drops the strike you were waiting to start');
@@ -1362,7 +1362,7 @@ export class Game {
     f.walk = p.hypo.walk;
     f.pending = null;
     const changed = JSON.stringify(f.walk) !== before;
-    if (changed && tk.kind !== 'launch') this.addLog(f.walk ? `${f.name} walks ${this.walkText(f)}.` : `${f.name} stops walking.`, 'dim', f.index);
+    if (changed && tk.kind !== 'launch') this.addLog(f.walk ? `${f.name} moves ${this.walkText(f)}.` : `${f.name} stays in place.`, 'dim', f.index);
     f.nextTurn = p.nextTurn;
     const n = f.windups.length;
     p.apply();

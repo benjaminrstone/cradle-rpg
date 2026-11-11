@@ -26,9 +26,9 @@ Walking out of Close range of the opponent lets them strike you as you go, whene
 
 ## Movement
 
-Walking is a standing order that runs alongside everything else. On your turn you pick an action and, if you like, a new order; you keep following it while the action plays out and after, until you change it. Walking never takes a turn of its own: to just walk, give the order and wait.
+Moving is a standing order that runs alongside everything else. On your turn you pick an action and, if you like, a new move order; you keep following it while the action plays out and after, until you change it. Moving never takes a turn of its own: to just move, give the order and wait.
 
-- **Orders:** close in (follow the opponent, stopping 1.5 m away); hold a distance (keep that many metres from the opponent wherever they go: closing if they're farther, backing off if they're nearer); go to a spot (the shortest route there, around obstacles); or stop. Backing off goes straight back, or along whatever is in the way while that still opens the gap. Cornered, you stay put.
+- **Orders:** close in (follow the opponent, stopping 1.5 m away); hold a distance (keep that many metres from the opponent wherever they go: closing if they're farther, backing off if they're nearer); go to a spot (the shortest route there, around obstacles); or stay in place. Backing off goes straight back, or along whatever is in the way while that still opens the gap. Cornered, you stay put.
 - **Pace:** 2 m per tick at Speed 100, × (Speed / 100)² like other physical actions, × how much the action leaves you free to move. With several things going at once, the slowest counts.
 
 | Doing | Pace |

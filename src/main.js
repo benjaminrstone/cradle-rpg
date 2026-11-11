@@ -147,7 +147,7 @@ function fighterChips(f) {
       + `<span class="prog" style="width:${progress(f.flight) * 100}%"></span></span>`);
   } else if (f.walk) {
     const arr = f.walk.to ? game.arrival(f, 20) : null;
-    chips.push(`<span class="chip windup move" title="Walking pace now: ${game.paceText(game.paceAt(f, game.time))}"><span class="ic">➜</span>Walking ${game.walkText(f)}`
+    chips.push(`<span class="chip windup move" title="Pace now: ${game.paceText(game.paceAt(f, game.time))}"><span class="ic">➜</span>Moving ${game.walkText(f)}`
       + `<span class="r">${arr != null ? `arrives ${inTicks(arr)}` : `${game.paceText(game.paceAt(f, game.time))} pace`}</span></span>`);
   }
   if (f.pending) {
@@ -391,13 +391,14 @@ function walkBar(f, note = '') {
   const w = walkChoice();
   const them = game.opponent(f).name;
   const order = game.walkOrder(f, w);
-  const shown = w === 'keep' ? (f.walk ? `walking ${game.walkText(f)}` : 'standing')
-    : order.error ? order.error : order.walk ? `walk ${game.walkText(f, order.walk)}` : 'stop';
+  const shown = w === 'keep' ? (f.walk ? `moving ${game.walkText(f)}` : 'staying in place')
+    : order.error ? order.error : order.walk ? `move ${game.walkText(f, order.walk)}` : 'stay in place';
   const btn = (v, label, title = '') => `<button class="ghost${w === v ? ' on' : ''}" data-walk="${v}" title="${title}">${label}</button>`;
-  return `<div class="walk-bar"><span class="label">Walk</span><b>${shown}</b>${note ? ` <span class="muted">${note}</span>` : ''}
-    <span class="walk-btns">${btn('keep', 'As you are')}${btn('toward', 'Close in', `Follow ${them} into Close range`)}
-      <span class="hold">hold at ${HOLDS.map((d) => btn(`hold:${d}`, d, `Keep ${d} m from ${them}, wherever they go`)).join('')} m</span>
-      ${f.walk || w !== 'keep' ? btn('stop', 'Stop') : ''}</span>
+  // "Stay in place" always leaves you standing: it keeps the order when you have none, and stops you when you have one.
+  return `<div class="walk-bar"><span class="label">Move</span><b>${shown}</b>${note ? ` <span class="muted">${note}</span>` : ''}
+    <span class="walk-btns">${f.walk ? `${btn('keep', 'Keep going', `Keep moving ${game.walkText(f)}`)}${btn('stop', 'Stay in place')}` : btn('keep', 'Stay in place')}
+      ${btn('toward', 'Close in', `Follow ${them} into Close range`)}
+      <span class="hold">hold at ${HOLDS.map((d) => btn(`hold:${d}`, d, `Keep ${d} m from ${them}, wherever they go`)).join('')} m</span></span>
     <span class="muted">or click the field</span></div>`;
 }
 
@@ -570,7 +571,7 @@ function reactionModel() {
     else if (o.interrupts && defWindups.length) lines.push(`<span class="bad">Over your threshold (${fmt(game.threshold(def))}): breaks your wind-ups</span>`);
     else if (defWindups.length) lines.push(`<span class="ok">Under your threshold (${fmt(game.threshold(def))}): ${defWindups.map((w) => w.label).join(', ')} still lands</span>`);
   }
-  if (o.courseText) lines.push(`Changes course: ${o.courseText === 'stop' ? 'stops walking' : `walks ${o.courseText}`}`);
+  if (o.courseText) lines.push(`Changes course: ${o.courseText === 'stop' ? 'stays in place' : `moves ${o.courseText}`}`);
   else if (o.courseError) lines.push(`<span class="bad">${o.courseError}</span>`);
   const after = def.nextTurn + (o.delay || 0);
   lines.push(o.madraCost || o.delay
@@ -634,7 +635,7 @@ function renderOpportunity(f) {
   const op = game.opportunityOptions();
   const s = op.strike;
   return `
-    <div class="phead theme-${f.theme}"><span class="prompt-title">${f.name}: ${op.mover} is leaving</span><span class="muted">walking out of Close range</span></div>
+    <div class="phead theme-${f.theme}"><span class="prompt-title">${f.name}: ${op.mover} is leaving</span><span class="muted">moving out of Close range</span></div>
     <div class="outcome" data-react-card="strike">
       <span class="big">${s.damageText}</span>
       <div class="lines"><span>damage if it hits (${pct(s.chance)}) · lands now${s.interrupts ? ' · <span class="bad">breaks their wind-ups</span>' : ''}</span><span>Costs: your next turn ${fmt(s.delay)} later</span></div>
@@ -652,12 +653,12 @@ function renderCourse(f) {
   const threat = after.windups.find((x) => x.eventId === p.threat);
   const what = threat ? `<b>${after.name}'s ${threat.label}</b> ${windupVerb(threat)} ${inTicks(threat.end)}, and would catch you where you're headed` : `${after.name} has just acted`;
   return `
-    <div class="phead theme-${f.theme}"><span class="prompt-title">${f.name}: walk out of it?</span></div>
+    <div class="phead theme-${f.theme}"><span class="prompt-title">${f.name}: move out of it?</span></div>
     <div class="incoming theme-${after.theme}"><div class="what">${what}</div>
       ${threat ? `<div class="facts"><span class="fact">${relTimes(game.describeWindup(threat))}</span></div>` : ''}</div>
     ${walkBar(f, `changing it costs +${fmt(game.courseDelay(f))} ticks`)}
     <div class="card-preview">${previewHtml(pv)}</div>
-    <div class="detail-actions"><button class="primary" data-course="keep">Stay as you are</button>
+    <div class="detail-actions"><button class="primary" data-course="keep">${f.walk ? 'Keep going' : 'Stay in place'}</button>
       <button data-course="change" ${w !== 'keep' && pv.enabled ? '' : 'disabled'}>Change course${pv.delay ? ` · +${fmt(pv.delay)} ticks` : ''}</button></div>`;
 }
 
