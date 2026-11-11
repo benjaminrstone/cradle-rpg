@@ -4,16 +4,15 @@ import { allFighters } from './builds.js';
 import { openBuilder } from './builder.js';
 import { parsePoint, dist as A_dist } from './arena.js';
 import { reachText } from './rules.js';
-import { renderField } from './field.js';
+import { renderField, showFx } from './field.js';
 import { initClaude, claudeToAct, waitingPanel, syncClaude, claudeSide, syncFetch } from './claude.js';
 
 let game;
-// UI state: slider amounts and targets per option, the selected menu row, the reaction being
-// built (dodge toggle and block amount), which fighter-panel tab is open, and what's hovered.
 const ui = {
   amount: {}, target: {}, selected: null, desc: new Set(), walk: 'keep',
   dodge: false, block: 0, hover: null, tabs: [null, null],
   picks: loadPicks(), queueAll: loadQueueMode(),
+  logSeen: 0, broken: new Set(),
 };
 const $ = (id) => document.getElementById(id);
 const EPS = 1e-9;
@@ -49,6 +48,7 @@ function start() {
 }
 
 function resetView() {
+  ui.logSeen = game.log.length;
   ui.amount = {};
   ui.target = {};
   ui.selected = null;
@@ -97,8 +97,7 @@ const shortPath = (name) => name.replace(/^Path of (the )?/, '');
 // ---------- fighters ----------
 const clampPct = (v, max) => Math.max(0, Math.min(100, (v / max) * 100));
 
-// A bar with an optional hover ghost and threshold ticks. A tick sits where the bar would be after
-// one hit just big enough to break wind-ups (solid) or stances (dotted).
+// A tick sits where the bar would be after one hit just big enough to break wind-ups (solid) or stances (dotted).
 function bar(label, cls, value, max, delta = 0, ticks = []) {
   const now = Math.max(0, value);
   const after = Math.max(0, value + delta);
@@ -115,14 +114,12 @@ function bar(label, cls, value, max, delta = 0, ticks = []) {
 
 const progress = (w) => Math.min(1, Math.max(0, (game.time - w.start) / Math.max(0.01, w.end - w.start)));
 
-// What a wind-up does when it finishes: a stance comes up, a construct forms, anything else lands.
 function windupVerb(w) {
   const ev = game.events.find((e) => e.id === w.eventId);
   const k = ev ? ev.action.kind : '';
   return k === 'stance' ? 'up' : k === 'forged' || k === 'ring' || k === 'piece' ? 'forms' : 'lands';
 }
 
-// The live state as chips: stances up, constructs, wind-ups and a move in progress.
 function fighterChips(f) {
   const chips = [];
   for (const s of game.activeStances(f)) {
@@ -154,12 +151,11 @@ function fighterChips(f) {
       + `<span class="r">${arr != null ? `arrives ${inTicks(arr)}` : `${game.paceText(game.paceAt(f, game.time))} pace`}</span></span>`);
   }
   if (f.pending) {
-    chips.push(`<span class="chip windup"><span class="ic">✊</span>Closing in to strike<span class="r">gives up ${inTicks(f.pending.giveUp)}</span></span>`);
+    chips.push(`<span class="chip windup"><span class="ic">${STRIKE_ICON}</span>Closing in to strike<span class="r">gives up ${inTicks(f.pending.giveUp)}</span></span>`);
   }
   return chips.length ? chips.join('') : '<span class="empty">Nothing up or winding up</span>';
 }
 
-// Tabs behind the panel: Stats, Path, and Seen (what this fighter has shown so far).
 function fighterTab(f, tab) {
   const o = game.opponent(f);
   if (tab === 'stats') {
@@ -214,7 +210,7 @@ function renderFighter(f, ghost = null) {
   const path = game.path(f);
   const o = game.opponent(f);
 
-  // Next turn, relative to now. A tie goes to whoever is listed first.
+  // A tie goes to whoever is listed first.
   let turn;
   if (p && p.kind === 'turn' && p.fighter === f.index) turn = '<span class="turn now">Next turn <b>now</b></span>';
   else if (f.nextTurn - game.time < 0.05) turn = `<span class="turn now">Next turn <b>now</b>${p && p.fighter === o.index ? `, after ${o.name}` : ''}</span>`;
@@ -239,18 +235,17 @@ function renderFighter(f, ghost = null) {
 
   el.innerHTML = `
     <div class="fp-head"><span class="name">${f.name}</span>${turn}</div>
-    <div class="sub">${f.stage} · ${path.name}${extras ? ` · ${extras}` : ''}</div>
-    <div class="thr-key" title="Ticks on the health and spirit bars: one hit that takes you past them breaks your wind-ups (solid) or stances (dotted). Spiritual hits count double."><span>one hit breaks</span><span><i></i>wind-ups ${fmt(thr)}</span><span><i class="st"></i>stances ${fmt(st)}</span></div>
+    <div class="info"><div class="sub">${f.stage} · ${path.name}${extras ? ` · ${extras}` : ''}</div>
+      ${note ? `<div class="ghost-note">${note}</div>`
+    : `<div class="thr-key" title="One hit this big breaks ${f.name}'s wind-ups (solid tick on the bars) or stances (dotted). Spiritual hits count double."><span><i></i>wind-ups ${fmt(thr)}</span><span><i class="st"></i>stances ${fmt(st)}</span></div>`}</div>
     ${bar('Health', 'health', f.health, f.stats.health, d.health, healthTicks)}
     ${bar('Spirit', 'spirit', f.spirit, f.stats.spirit, d.spirit, spiritTicks)}
     ${bar('Madra', 'madra', f.madra, f.stats.pool, d.madra)}
-    ${note ? `<div class="ghost-note">${note}</div>` : ''}
     <div class="chips">${fighterChips(f)}</div>
     <div class="fp-foot">${tabBtn('stats', 'Stats')}${tabBtn('path', 'Path')}${tabBtn('seen', `Seen${seenCount ? ` ${seenCount}` : ''}`)}${drawControl(f)}</div>
     ${tab ? `<div class="fp-tab">${fighterTab(f, tab)}</div>` : ''}`;
 }
 
-// Draw offers: a toggle for each side you control; Claude's offer is shown as a label.
 function drawControl(f) {
   if (game.result) return '';
   const offering = game.drawOffers[f.index];
@@ -262,20 +257,19 @@ function drawControl(f) {
 
 // ---------- action menu ----------
 const KIND_ICON = { stance: '◆', forge: '★', command: '★', construct: '⬡', ring: '◌', launch: '⤴', disrupt: '⊘', pulse: '◎' };
+const STRIKE_ICON = '⚔\uFE0E';
 function iconFor(f, o) {
-  if (o.key === 'strike') return '✊';
-  if (o.key === 'move') return '➜';
-  if (o.key === 'wait') return '⏸';
+  if (o.key === 'strike') return STRIKE_ICON;
+  if (o.key === 'wait') return '◷';
   if (o.group === 'drop') return '◇';
   const t = game.tech(f, o.key);
   if (!t) return '•';
   if (KIND_ICON[t.kind]) return KIND_ICON[t.kind];
   if (t.area) return '◎';
-  if (t.dtype === 'physical' || t.physical) return '✊';
+  if (t.dtype === 'physical') return STRIKE_ICON;
   return '↯';
 }
 
-// The amount an option's slider is at (clamped to what it allows now).
 function amountFor(o) {
   if (!o.slider) return 0;
   const s = o.slider;
@@ -285,24 +279,21 @@ function amountFor(o) {
 }
 
 function targetFor(o) {
-  if (o.key === 'move') return '';
   if (o.targets && !o.targets.some((t) => t.id === ui.target[o.key])) ui.target[o.key] = '';
   return ui.target[o.key] || '';
 }
 
-// Where to walk alongside this decision: "keep" until the person picks something.
 const walkChoice = () => ui.walk || 'keep';
 
 const VERB = { attack: 'lands', stance: 'up', construct: 'forms', move: 'arrives' };
 
-// A one-line gist for a menu row: when it lands, its main effect, and what it costs.
 function gistFor(f, o) {
   const amount = amountFor(o);
   const target = targetFor(o);
   const pv = game.preview(f, o.key, amount, target, walkChoice());
   if (o.group === 'drop') return { text: `raise again after ${fmt(game.reraiseDelay(f))}`, cost: 'free', pv };
-  if (((o.key === 'move' && !f.walk && walkChoice() === 'keep') || (o.point && o.key !== 'move' && !target)) && !pv.enabled) {
-    return { text: o.point && o.point.line ? 'pick its direction on the field' : o.point && o.point.area ? 'pick its centre on the field' : 'pick where to walk: click the field · Toward · Away', cost: '', pv, pick: true };
+  if (o.point && !target && !pv.enabled) {
+    return { text: o.point.line ? 'pick its direction on the field' : o.point.area ? 'pick its centre on the field' : 'pick where to land on the field', cost: '', pv, pick: true };
   }
   if (!pv.enabled) return { text: pv.reason, cost: '', pv, warn: true };
   const pj = game.project(f, o.key, amount, target, walkChoice());
@@ -323,45 +314,94 @@ function gistFor(f, o) {
     if (dmg.length) bits.push(`${dmg.join(' + ')}${chance ? ` · ${chance}` : /no roll/.test(note) ? ' · no roll' : ''}`);
     else if (note) bits.push(note);
     else if (pj.notes[f.index]) bits.push(pj.notes[f.index]);
-    if (o.key === 'wait') bits.splice(0, bits.length, `${fmt(amount)} ticks`);
+    if (o.key === 'wait') {
+      const arr = game.plan(f, 'wait', amount, '', walkChoice()).arrival;
+      bits.splice(0, bits.length, `${fmt(amount)} ticks${arr != null ? ` · you arrive ${inTicks(arr)}` : ''}`);
+    }
   }
   const madra = pj && pj.deltas[f.index].madra ? fmt(-pj.deltas[f.index].madra) : '';
   return { text: bits.join(' · '), cost: madra, pv, warn: !!pv.warning, warning: pv.warning };
 }
 
-// Slider, target picker and field picker for an option.
 function optionInputs(f, o) {
   let html = '';
   if (o.slider) {
     const s = o.slider;
     const amount = amountFor(o);
-    html += `<label class="slider">${s.label} <input type="range" min="${s.min}" max="${s.max}" step="${s.step}" value="${amount}" data-amount="${o.key}"><b data-amount-val="${o.key}">${amount}</b></label>`;
+    html += `<label class="slider">${s.label} <input type="range" min="${s.min}" max="${s.max}" step="${s.step}" value="${amount}" data-amount="${o.key}"><b data-amount-val="${o.key}">${amount}</b></label>
+      <div data-marks="${o.key}">${marksHtml(turnMarks(f, o), amount, `data-mark="${o.key}"`)}</div>`;
   }
   if (o.targets) {
     const cur = targetFor(o);
     html += `<label class="slider">Target <select data-target="${o.key}">${o.targets.map((t) =>
       `<option value="${t.id}" ${t.id === cur ? 'selected' : ''}>${t.label}</option>`).join('')}</select></label>`;
   }
-  if (o.point && o.key !== 'move') html += pointPicker(f, o);
+  if (o.point) html += pointPicker(f, o);
   return html;
 }
 
-// Where to walk alongside the decision: keep your course, toward or away from the opponent,
-// stop, or a spot clicked on the field.
+// ---------- slider marks ----------
+// The values on a slider worth stopping at, worked out from the engine: [{ at, label }].
+function turnMarks(f, o) {
+  const s = o.slider;
+  const opp = game.opponent(f);
+  const walk = walkChoice();
+  const theirs = opp.windups.filter((w) => !game.isPlainStrike(w));
+  const marks = [];
+  if (o.key === 'wait') {
+    const arr = game.plan(f, 'wait', s.min, '', walk).arrival;
+    const add = (t, label) => { const at = Math.ceil((t - game.time) * 10 - 1e-6) / 10; if (at >= s.min && at <= s.max) marks.push({ at, label }); };
+    if (arr != null) add(arr, 'you arrive');
+    for (const w of f.windups) add(w.end, `your ${w.label} ${windupVerb(w)}`);
+    for (const w of opp.windups) add(w.end, `${opp.name}'s ${w.label} ${windupVerb(w)}`);
+    if (opp.nextTurn > game.time + EPS) add(opp.nextTurn, `${opp.name}'s next turn`);
+    return marks;
+  }
+  const t = game.tech(f, o.key);
+  if (!t || t.kind !== 'attack' || t.zone || targetFor(o)) return marks;
+  const target = ui.target[o.key] || '';
+  const lands = (m) => { const p = game.plan(f, o.key, m, target, walk); const q = p.enabled && p.queue.find((x) => x.time != null); return q ? q.time : Infinity; };
+  if (theirs.length) {
+    // The wind-up only grows with madra, so the most that still lands first is found by halving.
+    const first = theirs.reduce((a, b) => (a.end <= b.end ? a : b));
+    let lo = s.min;
+    let hi = s.max;
+    if (lands(lo) < first.end - EPS) {
+      while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (lands(mid) < first.end - EPS) lo = mid; else hi = mid - 1; }
+      if (lo < s.max) marks.push({ at: lo, label: `lands before ${first.label}` });
+    }
+  }
+  const find = (test) => { for (let m = s.min; m <= s.max; m += s.step) if (test(m)) return m; return null; };
+  const results = (m) => { const prof = game.attackProfile(f, o.key, m); return game.hitResults(f, opp, prof, game.hitsAgainst(f, opp, prof)); };
+  const mark = (at, label) => { if (at != null) marks.push({ at, label }); };
+  if (theirs.length) mark(find((m) => results(m).some((r) => r.interrupts)), 'breaks their wind-ups');
+  if (game.activeStances(opp).length) mark(find((m) => results(m).some((r) => r.breaksStances)), 'breaks their stances');
+  mark(find((m) => { const r = results(m); return r.reduce((sum, x) => sum + x.dmg, 0) >= opp[r[0].track] - EPS; }), 'takes them out');
+  return marks.sort((a, b) => a.at - b.at);
+}
+
+function marksHtml(marks, current, attr) {
+  if (!marks.length) return '';
+  return `<div class="marks">${marks.map((m) =>
+    `<button class="mark${Math.abs(m.at - current) < 1e-6 ? ' on' : ''}" ${attr} data-at="${m.at}"><b>${fmt(m.at)}</b> ${m.label}</button>`).join('')}</div>`;
+}
+
+const HOLDS = [5, 10, 15, 20];
 function walkBar(f, note = '') {
   const w = walkChoice();
-  const p = parsePoint(w);
   const them = game.opponent(f).name;
-  const now = f.walk ? `walking ${game.walkText(f)}` : 'standing';
-  const shown = w === 'keep' ? `keep ${now}` : p ? `to (${fmt(p.x)}, ${fmt(p.y)})` : w === 'toward' ? `toward ${them}` : w === 'away' ? `away from ${them}` : 'stop';
-  const btn = (v, label) => `<button class="ghost${w === v ? ' on' : ''}" data-walk="${v}">${label}</button>`;
+  const order = game.walkOrder(f, w);
+  const shown = w === 'keep' ? (f.walk ? `walking ${game.walkText(f)}` : 'standing')
+    : order.error ? order.error : order.walk ? `walk ${game.walkText(f, order.walk)}` : 'stop';
+  const btn = (v, label, title = '') => `<button class="ghost${w === v ? ' on' : ''}" data-walk="${v}" title="${title}">${label}</button>`;
   return `<div class="walk-bar"><span class="label">Walk</span><b>${shown}</b>${note ? ` <span class="muted">${note}</span>` : ''}
-    <span class="walk-btns">${btn('keep', 'Keep')}${btn('toward', `Toward ${them}`)}${btn('away', 'Away')}${f.walk ? btn('stop', 'Stop') : ''}</span>
+    <span class="walk-btns">${btn('keep', 'As you are')}${btn('toward', 'Close in', `Follow ${them} into Close range`)}
+      <span class="hold">hold at ${HOLDS.map((d) => btn(`hold:${d}`, d, `Keep ${d} m from ${them}, wherever they go`)).join('')} m</span>
+      ${f.walk || w !== 'keep' ? btn('stop', 'Stop') : ''}</span>
     <span class="muted">or click the field</span></div>`;
 }
 
-// Moves and Launch: where to. Click the field, or head straight toward or away from the opponent.
-// Areas set at a point: where the centre goes. Click the field, or put it on the opponent.
+// Launch: where to land. Areas set at a point: where the centre goes.
 function pointPicker(f, o) {
   const cur = ui.target[o.key] || '';
   const p = parsePoint(cur);
@@ -386,7 +426,6 @@ function optionDesc(f, o) {
   return [o.cardDesc, o.desc].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(' ');
 }
 
-// One row of the menu; the selected one opens with its controls, full preview and Use button.
 function menuRow(f, o) {
   const g = gistFor(f, o);
   const sel = ui.selected === o.key;
@@ -400,7 +439,7 @@ function menuRow(f, o) {
       <span class="cost">${g.cost}</span></div>`;
   if (!sel) return `<div class="mitem" data-card="${o.key}">${head}</div>`;
   const desc = optionDesc(f, o);
-  const label = o.group === 'drop' ? 'Drop' : o.key === 'move' ? 'Walk' : o.key === 'wait' ? 'Wait' : `Use ${o.card ? o.label : o.label}`;
+  const label = o.group === 'drop' ? 'Drop' : o.key === 'wait' ? 'Wait' : `Use ${o.label}`;
   return `<div class="mitem open" data-card="${o.key}">${head}
     <div class="detail">
       ${optionInputs(f, o)}
@@ -419,7 +458,7 @@ function renderTurn(f) {
     return list.length ? `<div class="mgroup"><span class="label">${label}</span>${list.map((o) => menuRow(f, o)).join('')}</div>` : '';
   };
   return `
-    <div class="phead theme-${f.theme}"><span class="prompt-title">${f.name}'s turn</span><span class="muted">Hover to preview on the board · click to choose</span></div>
+    <div class="phead theme-${f.theme}"><span class="prompt-title">${f.name}'s turn</span><span class="muted">Hover to preview on the board · click to open</span></div>
     ${walkBar(f)}
     <div class="menu">
       ${group('path', shortPath(game.path(f).name))}
@@ -461,13 +500,25 @@ function reactionModel() {
   const rollOf = (o) => (prof.area || kind === 'pulse' || kind === 'disrupt' ? '' : o.chances && o.chances.length > 1 ? `${o.chances.map(pct).join(' / ')} · ` : `${pct(o.chance)} · `);
   const costOf = (o) => [o.madraCost ? `${fmt(o.madraCost)} madra` : '', o.delay ? `+${fmt(o.delay)} ticks` : ''].filter(Boolean).join(', ') || 'free';
 
-  // Would this outcome drop the defender's health or spirit to 0?
   const fatalOf = (o) => kind === 'attack' && o.total > 0 && (o.track === 'spirit' ? def.spirit : def.health) - o.total <= 0;
+  // Block amounts worth stopping at, with the dodge as it's set.
+  const marks = [];
+  if (canBlock) {
+    const base = outcome(ui.dodge, 0);
+    const least = (test) => { for (let m = 1; m <= ro.block.maxBase; m++) if (test(outcome(ui.dodge, m))) return m; return null; };
+    const mark = (at, text) => { if (at != null && !marks.some((x) => x.at === at)) marks.push({ at, label: text }); };
+    if (kind === 'attack' && !base.escapes) {
+      if (fatalOf(base)) mark(least((o) => !fatalOf(o)), 'you stay up');
+      if (base.breaksStances) mark(least((o) => !o.breaksStances), 'keeps your stances');
+      if (base.interrupts && def.windups.some((w) => !game.isPlainStrike(w))) mark(least((o) => !o.interrupts), 'keeps your wind-ups');
+    }
+    if (!base.escapes) mark(least(nothing), kind === 'pulse' ? 'nothing breaks' : 'stops it all');
+    marks.sort((a, b) => a.at - b.at);
+  }
   const tiles = [{ name: 'Take it', o: outcome(false, 0) }];
   if (canDodge) tiles.push({ name: 'Dodge', o: outcome(true, 0) });
   if (canBlock) tiles.push({ name: `${kind === 'construct' ? 'Reinforce' : 'Block'} ${blockAt}`, o: outcome(false, blockAt), note: zero == null ? 'most you can' : '' });
 
-  // Facts about what's coming.
   const facts = [];
   if (kind === 'pulse') facts.push(`<b>${prof.madra}</b> madra pulse`, `cancels what cost <b>${fmt(prof.madra / 2)}</b> or less`);
   else if (kind === 'disrupt') facts.push('breaks your wind-ups and stances if it hits');
@@ -482,15 +533,13 @@ function reactionModel() {
   if (prof.area) facts.push('area · <b>no roll</b>');
   if (prof.madra && kind === 'attack') facts.push(`${prof.madra} madra in it`);
 
-  // Controls: what the dodge and the block do, from the API.
   const st = ro.dodge.sidestep;
   const dodgeText = !canDodge ? '' : st
     ? `Sidestep ${fmt(st.metres)} m out from its centre: ${st.escapes ? '<b>gets you out</b>' : `still inside (you'd need ${fmt(st.needs)} m)`}`
     : `+${ro.dodge.bonus} Defense on ${a.hits > 1 ? 'every hit' : 'the hit'}`;
-  const blockText = !canBlock ? '' : kind === 'pulse' ? `−1.5 strength per madra · up to ${ro.block.maxBase}`
-    : `soaks 1.5 per madra${a.hits > 1 ? ', shared by the hits' : ''} · up to ${ro.block.maxBase}`;
+  const blockText = !canBlock ? '' : kind === 'pulse' ? `−${ro.block.soakPerMadra} strength per madra · up to ${ro.block.maxBase}`
+    : `soaks ${ro.block.soakPerMadra} per madra${a.hits > 1 ? ', shared by the hits' : ''} · up to ${ro.block.maxBase}`;
 
-  // The outcome of the current choice.
   const o = current;
   const lines = [];
   let big;
@@ -544,7 +593,7 @@ function reactionModel() {
     : `threshold ${fmt(game.threshold(def))} · stances ${fmt(game.stanceThreshold(def))}`;
 
   return {
-    att, def, prof, kind, facts, subtitle, canDodge, canBlock, dodgeText, blockText, maxBlock: ro.block.maxBase,
+    att, def, prof, kind, facts, subtitle, canDodge, canBlock, dodgeText, blockText, maxBlock: ro.block.maxBase, marks,
     tiles: tiles.map((t) => ({ ...t, cost: costOf(t.o), result: `${rollOf(t.o)}${dmgOf(t.o)}${fatalOf(t.o) ? ' · <span class="bad">takes you out</span>' : ''}` })),
     current: { ...o, big, lines, label }, extra,
   };
@@ -567,7 +616,8 @@ function renderReaction(m) {
     ${m.canDodge || m.canBlock ? `<div class="rx">
       ${m.canDodge ? `<div class="ctrl${ui.dodge ? ' on' : ''}" data-dodge-toggle><div class="ch"><span class="toggle"></span>Dodge</div><div class="x">${m.dodgeText}</div></div>` : ''}
       ${m.canBlock ? `<div class="ctrl${m.current.block > 0 ? ' on' : ''}"><div class="ch">${m.kind === 'construct' ? 'Reinforce' : 'Block'}<span class="r">${m.blockText}</span></div>
-        <label class="slider">Madra <input type="range" min="0" max="${m.maxBlock}" value="${m.current.block}" data-block><b data-block-val>${m.current.block}</b></label></div>` : ''}
+        <label class="slider">Madra <input type="range" min="0" max="${m.maxBlock}" value="${m.current.block}" data-block><b data-block-val>${m.current.block}</b></label>
+        <div data-block-marks>${marksHtml(m.marks, m.current.block, 'data-block-mark')}</div></div>` : ''}
     </div>` : ''}
     ${walkBar(m.def, `changing it costs +${fmt(game.courseDelay(m.def))} ticks`)}
     <div class="outcome" data-react-card="${m.current.choice}">
@@ -580,7 +630,6 @@ function renderReaction(m) {
       <button data-react="${x.choice}" ${x.available ? '' : 'disabled'}>${x.name} · ${x.cost}</button></div>`).join('')}`;
 }
 
-// Someone is walking out of Close range: strike as they go, or let them leave.
 function renderOpportunity(f) {
   const op = game.opportunityOptions();
   const s = op.strike;
@@ -594,18 +643,21 @@ function renderOpportunity(f) {
     <div class="alt"><span class="nm">Let them go</span><span>No cost</span><button data-opp="let">Let them go</button></div>`;
 }
 
-// The opponent has just taken a turn: keep your course or change it.
+// An area that would catch you has just started: stay on course, or walk out of it.
 function renderCourse(f) {
-  const after = game.fighters[game.prompt.after];
+  const p = game.prompt;
+  const after = game.fighters[p.after];
   const w = walkChoice();
   const pv = game.coursePreview(w);
-  const did = game.log.filter((l) => l.who === after.index && Math.abs(l.time - game.time) < 1e-9).map((l) => l.text).join(' ');
+  const threat = after.windups.find((x) => x.eventId === p.threat);
+  const what = threat ? `<b>${after.name}'s ${threat.label}</b> ${windupVerb(threat)} ${inTicks(threat.end)}, and would catch you where you're headed` : `${after.name} has just acted`;
   return `
-    <div class="phead theme-${f.theme}"><span class="prompt-title">${f.name}: change course?</span><span class="muted">${after.name} has just acted</span></div>
-    <div class="incoming theme-${after.theme}"><div class="what">${relTimes(did || `${after.name} acts.`)}</div></div>
-    ${walkBar(f)}
+    <div class="phead theme-${f.theme}"><span class="prompt-title">${f.name}: walk out of it?</span></div>
+    <div class="incoming theme-${after.theme}"><div class="what">${what}</div>
+      ${threat ? `<div class="facts"><span class="fact">${relTimes(game.describeWindup(threat))}</span></div>` : ''}</div>
+    ${walkBar(f, `changing it costs +${fmt(game.courseDelay(f))} ticks`)}
     <div class="card-preview">${previewHtml(pv)}</div>
-    <div class="detail-actions"><button class="primary" data-course="keep">Keep going</button>
+    <div class="detail-actions"><button class="primary" data-course="keep">Stay as you are</button>
       <button data-course="change" ${w !== 'keep' && pv.enabled ? '' : 'disabled'}>Change course${pv.delay ? ` · +${fmt(pv.delay)} ticks` : ''}</button></div>`;
 }
 
@@ -662,9 +714,8 @@ async function watchCodeVersion() {
 watchCodeVersion();
 
 // ---------- timeline ----------
-// One lane per fighter. Wind-ups are bars from when they started to when they land, moves are
-// dotted bars, turns are tall ticks, and anything previewed is dashed. Elements persist between
-// updates (matched by key), so when time moves on they slide left instead of redrawing.
+// One lane per fighter. Elements persist between updates (matched by key), so when time moves
+// on they slide left instead of redrawing.
 function loadQueueMode() {
   try { return localStorage.getItem('queueMode') === 'all'; } catch { return false; }
 }
@@ -675,10 +726,6 @@ function timelineItems(ghost) {
   const whole = ui.queueAll;
   const items = [];
   const replaced = ghost ? (ghost.replacesTurn ?? ghost.shiftTurn) : null;
-  const evStart = new Map();
-  for (const f of game.fighters) {
-    for (const w of f.windups) for (const id of w.eventIds || [w.eventId]) evStart.set(id, w);
-  }
   for (const f of game.fighters) {
     for (const w of f.windups) {
       items.push({ key: `w:${w.eventId}`, who: f.index, kind: 'bar', start: w.start, end: w.end, label: `${w.label}${w.madra && !w.label.includes(`(${w.madra})`) ? ` · ${w.madra}` : ''}`, ev: w.eventId });
@@ -746,7 +793,6 @@ function renderQueue(ghost = null) {
       i.row = r;
     }
     syncLane(lane, mine, at, Math.max(1, rowEnds.length));
-    // Upkeep: a dashed madra line along the lane while any stance is held.
     const upkeep = game.activeStances(f).reduce((s, d) => s + game.upkeepRate(f, d), 0);
     let up = lane.querySelector('.upk');
     if (upkeep > 0) {
@@ -783,11 +829,12 @@ function syncLane(lane, items, at, rows = 1) {
       const s = Math.max(i.start, ui.queueAll ? 0 : game.time);
       el.style.left = at(s);
       el.style.width = `calc(${at(i.end)} - ${at(s)})`;
-      const h = 21 / rows;
-      el.style.top = `${4 + (i.row || 0) * h}px`;
-      el.style.height = `${h - (rows > 1 ? 1 : 0)}px`;
-      el.style.lineHeight = `${h - 2}px`;
-      el.textContent = rows > 2 ? '' : i.label;
+      // Up to three rows of bars keep their labels; more than that squeeze in without.
+      const h = rows > 3 ? 39 / rows : 13;
+      el.style.top = `${14 + (i.row || 0) * h}px`;
+      el.style.height = `${h - 1}px`;
+      el.style.lineHeight = `${h - 3}px`;
+      el.textContent = rows > 3 ? '' : i.label;
     } else if (i.kind === 'turn') {
       el.style.left = at(i.time);
       el.innerHTML = i.past || i.replaced ? '' : `<span class="tag">${i.tag}</span>`;
@@ -798,6 +845,11 @@ function syncLane(lane, items, at, rows = 1) {
   }
   for (const el of existing.values()) {
     if (el.classList.contains('ghost')) { el.remove(); continue; }
+    if (el.classList.contains('bar') && ui.broken.has(el.dataset.ev)) {
+      el.classList.add('broken');
+      setTimeout(() => el.remove(), 1100);
+      continue;
+    }
     el.classList.add('leaving');
     el.style.left = at(game.time);
     setTimeout(() => el.remove(), 500);
@@ -844,9 +896,10 @@ function currentGhost() {
     const k = ui.fieldHover.key;
     return game.project(f, k, ui.amount[k] || 0, ui.fieldHover.value, walkChoice());
   }
-  const k = (ui.hover && ui.hover.key) || ui.selected || (walkHover ? 'move' : null);
-  if (!k) return walkChoice() !== 'keep' ? game.project(f, 'move', 0, '', walkChoice()) : null;
-  return game.project(f, k, ui.amount[k] || 0, k === 'move' ? '' : ui.target[k] || '', walk);
+  // With no row open, a walk order is previewed as a wait.
+  const k = (ui.hover && ui.hover.key) || ui.selected || (walk !== 'keep' ? 'wait' : null);
+  if (!k) return null;
+  return game.project(f, k, ui.amount[k] || 0, ui.target[k] || '', walk);
 }
 
 // The field reports what the mouse is on; preview it on the bars and the timeline (not the
@@ -860,8 +913,6 @@ function onFieldHover(value) {
   renderQueue(ghost);
 }
 
-// What the field shows: on a person's turn, they can pick a destination; the route ghost is the
-// hovered or selected row's, or else the move already chosen.
 function fieldOpts(ghost) {
   const p = game.prompt;
   const human = !!p && ['turn', 'reaction', 'course'].includes(p.kind) && !claudeToAct(game);
@@ -879,7 +930,7 @@ function fieldOpts(ghost) {
   const f = game.current();
   const key = (ui.hover && ui.hover.key) || ui.selected;
   const opt = key ? game.turnOptions(f).find((o) => o.key === key) : null;
-  if (!opt || opt.key === 'move') return { ...out, picking: p.fighter };
+  if (!opt) return { ...out, picking: p.fighter };
   if (opt.point && opt.point.area) { ui.fieldKey = key; return { ...out, picking: p.fighter, aiming: { key, amount: ui.amount[key] || 0 } }; }
   if (opt.point) {
     const t = game.tech(f, key);
@@ -891,7 +942,6 @@ function fieldOpts(ghost) {
   return reach ? { ...out, picking: p.fighter, reach } : { ...out, picking: p.fighter };
 }
 
-// A targeted option's reach and the targets it could pick, for the field.
 function reachFor(f, opt) {
   const t = opt.key === 'strike' ? null : game.tech(f, opt.key);
   const single = opt.key === 'strike' || (t && ((t.kind === 'attack' && !t.area) || t.kind === 'disrupt' || t.kind === 'pulse'));
@@ -916,7 +966,6 @@ function reachFor(f, opt) {
   return { key: opt.key, spec, targets };
 }
 
-// Clicking a target on the field while a targeted attack is open.
 function pickTarget(key, id) {
   const f = game.current();
   const opt = f && game.turnOptions(f).find((o) => o.key === key);
@@ -933,8 +982,7 @@ function pickPoint(pt) {
   const p = game.prompt;
   if (!p) return;
   const f = game.fighters[p.fighter];
-  const open = p.kind === 'turn' && ui.selected && ui.selected !== 'move'
-    ? game.turnOptions(f).find((o) => o.key === ui.selected && o.point) : null;
+  const open = p.kind === 'turn' && ui.selected ? game.turnOptions(f).find((o) => o.key === ui.selected && o.point) : null;
   if (open) ui.target[open.key] = pt;
   else ui.walk = pt;
   renderPrompt();
@@ -950,12 +998,28 @@ function renderGhost() {
   renderField(game, fieldOpts(ghost));
 }
 
+// What has happened since the last render, for the board to show: hits and misses on the
+// tokens, broken wind-ups on the timeline, and a beat before the next choice.
+function freshFx() {
+  const fx = game.log.slice(ui.logSeen).map((l) => l.fx).filter(Boolean);
+  ui.logSeen = game.log.length;
+  ui.broken = new Set(fx.flatMap((x) => x.evs || []).map(String));
+  return fx;
+}
+
 function render() {
   ui.hover = null;
   ui.fieldHover = null;
   ui.hoverEv = null;
+  const fx = freshFx();
   renderPrompt();
   renderGhost();
+  showFx(game, fx);
+  if (fx.some((x) => x.kind !== 'reveal')) {
+    const el = $('prompt');
+    el.classList.add('beat');
+    setTimeout(() => el.classList.remove('beat'), 650);
+  }
   renderLog();
   syncClaude(game);
   saveFight();
@@ -978,7 +1042,6 @@ function resumeOrStart() {
     if (saved && saved.fighters && saved.fighters.every((f) => all.some((d) => d.id === f.id))) {
       game = Game.restore(saved, all);
       ui.picks = game.fighters.map((f) => f.id);
-      game.addLog('Page reloaded: the fight continues with the current rules.', 'system');
       resetView();
       return;
     }
@@ -1003,8 +1066,22 @@ document.addEventListener('click', (e) => {
   const act = e.target.closest('[data-act]');
   if (act && !act.disabled) {
     const key = act.dataset.act;
-    game.act(key, ui.amount[key] || 0, key === 'move' ? '' : ui.target[key] || '', walkChoice());
+    game.act(key, ui.amount[key] || 0, ui.target[key] || '', walkChoice());
     afterChoice();
+    return;
+  }
+  const mark = e.target.closest('[data-mark]');
+  if (mark) {
+    ui.amount[mark.dataset.mark] = Number(mark.dataset.at);
+    renderPrompt();
+    renderGhost();
+    return;
+  }
+  const blockMark = e.target.closest('[data-block-mark]');
+  if (blockMark) {
+    ui.block = Number(blockMark.dataset.at);
+    renderPrompt();
+    renderGhost();
     return;
   }
   const walk = e.target.closest('[data-walk]');
@@ -1117,6 +1194,7 @@ document.addEventListener('input', (e) => {
       item.querySelector('[data-preview]').innerHTML = previewHtml(g.pv);
       item.querySelector('.gist').textContent = g.warning ? `⚠ ${relTimes(g.warning.split(':')[0])}` : relTimes(g.text);
       item.querySelector('.cost').textContent = g.cost;
+      item.querySelectorAll('.mark').forEach((b) => b.classList.toggle('on', Number(b.dataset.at) === ui.amount[key]));
       const btn = item.querySelector('[data-act]');
       if (btn) btn.disabled = !g.pv.enabled;
     }
@@ -1134,6 +1212,7 @@ document.addEventListener('input', (e) => {
     panel.querySelector('.rtiles').replaceWith(fresh.querySelector('.rtiles'));
     panel.querySelector('.outcome').replaceWith(fresh.querySelector('.outcome'));
     slider.closest('.ctrl').classList.toggle('on', m.current.block > 0);
+    panel.querySelector('[data-block-marks]').innerHTML = marksHtml(m.marks, m.current.block, 'data-block-mark');
     panel.querySelector('[data-block-val]').textContent = String(m.current.block);
     renderGhost();
   }

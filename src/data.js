@@ -1,11 +1,9 @@
-// Fighters, Paths and traits from paths.md and traits.md.
-//
 // Technique kinds:
-//   attack    - a damaging technique (scales with madra unless noted)
+//   attack    - a damaging technique (scales with madra)
 //   stance    - held technique with upkeep
-//   construct - Forged object that persists on the field (scales with madra)
-//   disrupt   - breaks the target's wind-ups and stances (fixed cost)
-//   launch    - fast movement, one range band either way (fixed cost)
+//   construct - a Forged barrier (scales with madra); forge / command - Crown stars, forged then dropped; ring - a ring Forged on yourself
+//   disrupt   - breaks the target's wind-ups and stances (fixed cost); pulse - cancels what cost little (scales with madra)
+//   launch    - a straight flight (fixed cost)
 // Damage types (dtype): 'technique' (default), 'physical', 'spiritual'.
 
 export const BASE_STATS = {
@@ -14,10 +12,9 @@ export const BASE_STATS = {
   precision: 5, control: 5, perception: 5,
 };
 
-// One point-buy step of each stat (stats.md "Building a fighter").
+// One point-buy step of each stat.
 export const STAT_STEP = { health: 10, toughness: 1, speed: 5, pool: 15, cap: 2, spirit: 10, precision: 1, control: 1, perception: 1 };
 
-// A fighter's stats from their point-buy steps.
 export function statsFrom(steps = {}) {
   const stats = { ...BASE_STATS };
   for (const [k, step] of Object.entries(STAT_STEP)) stats[k] = BASE_STATS[k] + step * (steps[k] || 0);
@@ -57,8 +54,8 @@ export const PATHS = {
       },
       {
         id: 'voidDragonsDance', name: "Void Dragon's Dance", kind: 'attack', type: 'Ruler',
-        divisor: 2, toHit: 0, ranges: [0, 1], area: true, radius: 4, radiusPerMadra: 0.5, boostPerMadra: 1, ruler: true, fills: true,
-        desc: 'Finisher: a long build-up, then a wide blast. Ruler: no channel cap, and your next turn comes 1.5 ticks after you start, so you keep acting while it builds. Area attack centred on you, no roll: the fire and destruction aura around you ignites, hitting everything within 4 m + 0.5 m per madra of you (up to 14 m), behind cover or not. +1 damage per Black Flame madra you spend while it winds up.',
+        divisor: 2, toHit: 0, ranges: [0, 1], area: true, radius: 4, radiusPerMadra: 0.5, boostPerMadra: 0.5, ruler: true, fills: true,
+        desc: 'Finisher: a long build-up, then a wide blast. Ruler: up to twice your channel cap, and your next turn comes 1.5 ticks after you start, so you keep acting while it builds. Area attack centred on you, no roll: the fire and destruction aura around you ignites, hitting everything within 4 m + 0.5 m per madra of you (up to 14 m), behind cover or not. +0.5 damage per Black Flame madra you spend while it winds up.',
       },
     ],
   },
@@ -72,13 +69,13 @@ export const PATHS = {
     techniques: [
       {
         id: 'endlessSword', name: 'Endless Sword', kind: 'attack', type: 'Striker / Ruler',
-        divisor: 6, costMult: 1.5, toHit: 0, ranges: [0, 1], area: true, radius: 4, radiusPerMadra: 0.5, bladeHits: true, fills: true,
-        desc: 'A fast area attack centred on you, no roll: the sword aura around you resonates, slashing everything within 4 m + 0.5 m per point of power of you (up to 14 m), constructs included, behind cover or not. One extra hit per other blade close to the target. Wind-up madra ÷ 6, but it costs 1.5 madra per point of power.',
+        divisor: 4, costMult: 1.5, toHit: 0, ranges: [0, 1], area: true, radius: 4, radiusPerMadra: 0.5, bladeHits: true, fills: true,
+        desc: 'An area attack centred on you, no roll: the sword aura around you resonates, slashing everything within 4 m + 0.5 m per point of power of you (up to 14 m), constructs included, behind cover or not. One extra hit per other blade close to the target. It costs 1.5 madra per point of power.',
       },
       {
         id: 'ripplingSword', name: 'Rippling Sword', kind: 'attack', type: 'Striker',
-        divisor: 4, toHit: 0, ranges: [0, 1, 2], bestRange: 1, base: 10, physical: true,
-        desc: 'A strike whose edge extends into a wave of sword aura. Any range; best within 10 m.',
+        divisor: 4, toHit: 0, ranges: [0, 1, 2], bestRange: 1,
+        desc: 'A wave of sword aura thrown off the edge of a blade. Any range; best within 10 m.',
       },
       {
         id: 'flowingSword', name: 'Flowing Sword', kind: 'stance', type: 'Enforcer stance',
@@ -109,7 +106,7 @@ export const PATHS = {
         id: 'crown', name: 'Crown of the Hollow King', label: 'Forge a star', card: 'crown', kind: 'forge', type: 'Forger',
         divisor: 2,
         cardDesc: 'Forge stars high over your head, then drop them when the timing is right. Each star is its own construct with HP equal to its madra.',
-        desc: 'Forge one star for the Crown of the Hollow King, 14 m over your head, above every obstacle. The madra you put in sets its size; it takes madra ÷ 2 ticks to form, but your next turn comes after 1.5 ticks. Each star is its own construct with HP equal to its madra.',
+        desc: 'Forge one star for the Crown of the Hollow King, 14 m over your head, above every obstacle. The madra you put in sets its size; it takes a while to form (wind-up ÷ 2), but your next turn comes after 1.5 ticks. Each star is its own construct with HP equal to its madra.',
       },
       {
         id: 'dropStars', name: 'Crown of the Hollow King', label: 'Drop stars', card: 'crown', kind: 'command', type: 'Forger',
@@ -123,7 +120,7 @@ export const PATHS = {
       {
         id: 'madraPulse', cost: 2, name: 'Madra Pulse', kind: 'pulse', type: 'Striker / Ruler',
         divisor: 6, minMadra: 2, area: true, ranges: [0],
-        desc: 'A wash of pure madra at Close range. It cancels every wind-up, stance and construct of your opponent\u2019s there that cost at most half the madra you put in. They can block it: each madra of block takes 1.5 off its strength. No damage, no roll.',
+        desc: 'A wash of pure madra at Close range. It cancels every wind-up, stance and construct of your opponent\u2019s there that cost at most half the madra you put in. They can block it: each madra of block takes 1 off its strength. No damage, no roll.',
       },
     ],
   },
@@ -181,7 +178,7 @@ PATHS.sandviper = {
       id: 'paralyticCloud', name: 'Paralytic Cloud', kind: 'attack', type: 'Ruler',
       divisor: 2, ruler: true, area: true, aim: 'set', ranges: [0, 1], radius: 3, radiusPerMadra: 0.25, fills: true,
       zone: { duration: 8, every: 4, slowPerMadra: 0.02 },
-      desc: 'A Ruler technique that fills the air with toxic green gas. Set it at a spot within 10 m that you can see: after its wind-up it settles there (3 m + 0.25 m per madra) and stays 8 ticks. Anyone of your opponent\u2019s inside is slowed by 2% Speed per madra (up to 50%), and it pulses when it forms and every 4 ticks after. Ruler: no channel cap, and your next turn comes 1.5 ticks after you start.',
+      desc: 'A Ruler technique that fills the air with toxic green gas. Set it at a spot within 10 m that you can see: after its wind-up it settles there (3 m + 0.25 m per madra) and stays 8 ticks. Anyone of your opponent\u2019s inside is slowed by 2% Speed per madra (up to 50%), and it pulses when it forms and every 4 ticks after. Ruler: up to twice your channel cap, and your next turn comes 1.5 ticks after you start.',
     },
   ],
 };
@@ -228,25 +225,25 @@ export const FIGHTERS_RAW = [
   {
     id: 'lindon', name: 'Lindon', path: 'blackFlame', stage: 'Lowgold', theme: 'flame',
     // Black Flame and a Bloodforged Iron body; refined control, still learning to fight.
-    steps: { pool: 3, control: 2, perception: 1, toughness: 2, precision: -1, speed: -1 },
+    steps: { pool: 2, control: 2, toughness: 2, perception: 1, cap: 1, precision: -1, speed: -1 },
     traits: [], weapon: null,
   },
   {
     id: 'yerin', name: 'Yerin', path: 'endlessSword', stage: 'Lowgold', theme: 'sword',
     // The fastest and sharpest; fights with her blades rather than finesse.
-    steps: { precision: 4, speed: 1, perception: 1, toughness: 1, control: -1, pool: -1, spirit: -1 },
+    steps: { precision: 3, speed: 1, perception: 1, toughness: 1, control: -1, pool: -1, spirit: -1 },
     traits: ['swordArms'], weapon: { name: 'sword', blade: true, damage: 0 },
   },
   {
     id: 'eithan', name: 'Eithan', path: 'hollowKing', stage: 'Lowgold', theme: 'pure',
     // Sees everything and moves well; fragile, with little raw power.
-    steps: { perception: 5, pool: 5, speed: 1, precision: -1, cap: -1, toughness: -3, health: -2 },
+    steps: { perception: 3, pool: 3, speed: 1, precision: -1, cap: -1, toughness: -3, health: -2 },
     traits: [], weapon: { name: 'scissors', blade: true, damage: 0 },
   },
   {
     id: 'ziel', name: 'Ziel', path: 'dawnOath', stage: 'Lowgold', theme: 'force',
     // Hard to hurt; slow, with a damaged spirit.
-    steps: { toughness: 3, health: 3, control: -1, speed: -1, spirit: -1, pool: -1 },
+    steps: { toughness: 3, health: 2, precision: 1, control: -1, speed: -1, spirit: -1 },
     traits: [], weapon: { name: 'hammer', blade: false, damage: 4 },
   },
   {
@@ -257,5 +254,4 @@ export const FIGHTERS_RAW = [
   },
 ];
 
-// Canon fighters, with their stats worked out from their steps.
 export const FIGHTERS = FIGHTERS_RAW.map((f) => ({ ...f, stats: statsFrom(f.steps) }));

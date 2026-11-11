@@ -1,21 +1,102 @@
-// Field map: the arena from above, with its obstacles, both fighters, their stances, wind-ups,
-// barriers and Crown stars, the line between them, and range rings around whoever is acting.
-// Tokens persist between updates (matched by key), so fighters glide to new positions along
-// the route they walked, and wind-ups fade in as they build instead of the map redrawing.
-// On your turn, hovering the field shows the route a move would take, and a click picks it.
-// Area attacks show as circles: ones winding up, the hovered card's, and (while aiming an area set
-// at a point) the one under the mouse.
+// The arena from above. Everything sits in a world layer the size of the whole arena; the
+// camera is a transform on it that frames the fighters and whatever threatens them. Tokens
+// persist between updates (matched by key), so fighters glide along the route they walked.
 import { fmt } from './engine.js';
 import { RANGES } from './rules.js';
 import * as A from './arena.js';
 
 const NS = 'http://www.w3.org/2000/svg';
-const view = { game: null, picking: null, onPick: null, hoverAt: null, aiming: null, reach: null, onTarget: null, flight: null, onHover: null };
-// What the mouse is on, for the page to preview (a spot "x:y", or a target id): null when nothing.
+const view = { game: null, picking: null, onPick: null, hoverAt: null, aiming: null, reach: null, onTarget: null, flight: null, onHover: null, whole: loadWhole() };
+// What the mouse is on, for the page to preview (a spot "x:y", or a target id).
 let hoverValue = null;
 let lastHover = 'none';
 // Per fighter: where the token was last sent, at what game time, and the route ahead then.
 const trail = new Map();
+
+function loadWhole() {
+  try { return localStorage.getItem('fieldView') === 'whole'; } catch { return false; }
+}
+
+// ---------- camera ----------
+const PAD = 5;          // metres kept clear around what's framed
+const MIN_HEIGHT = 11;
+const CLOSEST = 33;     // pixels per metre at the closest, so tokens in Close range stay apart
+const STEP = 4;         // the view widens and narrows in steps, so it doesn't twitch
+
+// The part of the arena to show: both fighters, where they're walking, and every area on the
+// field or winding up. Game state only, so hovering never moves the camera.
+function frame(game, aspect, pixels) {
+  const { width: W, height: H } = game.arena;
+  // The whole arena, with room to spare on whichever side the viewport is longer.
+  const whole = Math.max(W, H * aspect);
+  const centred = (w, cx, cy) => ({ x: cx - w / 2, y: cy - w / aspect / 2, w });
+  if (view.whole) return centred(whole, W / 2, H / 2);
+  const pts = [];
+  for (const f of game.fighters) {
+    pts.push(game.pos(f));
+    if (f.walk || f.flight) { const r = game.routeAhead(f, game.time + 3); if (r) pts.push(r.path[r.path.length - 1]); }
+    for (const z of f.zones) pts.push(...extent(z.shape));
+  }
+  for (const e of game.events) {
+    const prof = e.action.kind === 'attack' && e.action.profile;
+    if (prof && (prof.radius != null || prof.shape)) pts.push(...extent(game.areaShape(game.fighters[e.actor], prof, e.time)));
+  }
+  const clampX = (v) => Math.min(W, Math.max(0, v));
+  const clampY = (v) => Math.min(H, Math.max(0, v));
+  const x0 = clampX(Math.min(...pts.map((q) => q.x)) - PAD);
+  const x1 = clampX(Math.max(...pts.map((q) => q.x)) + PAD);
+  const y0 = clampY(Math.min(...pts.map((q) => q.y)) - PAD);
+  const y1 = clampY(Math.max(...pts.map((q) => q.y)) + PAD);
+  const w = Math.ceil(Math.max(pixels / CLOSEST, MIN_HEIGHT * aspect, x1 - x0, (y1 - y0) * aspect) / STEP) * STEP;
+  if (w >= whole) return centred(whole, W / 2, H / 2);
+  // Stay inside the arena where the view fits in it; otherwise centre on it.
+  const h = w / aspect;
+  const within = (c, size, max) => (size >= max ? max / 2 : Math.min(max - size / 2, Math.max(size / 2, c)));
+  return centred(w, within(Math.round((x0 + x1) / 2), w, W), within(Math.round((y0 + y1) / 2), h, H));
+}
+
+const extent = (shape) => (shape.shape === 'line' ? [shape.from, shape.to]
+  : [{ x: shape.centre.x - shape.radius, y: shape.centre.y - shape.radius }, { x: shape.centre.x + shape.radius, y: shape.centre.y + shape.radius }]);
+
+function aim(world, game) {
+  const { width: W, height: H } = game.arena;
+  const port = world.parentElement;
+  if (!port.clientHeight) return;
+  const v = frame(game, port.clientWidth / port.clientHeight, port.clientWidth);
+  const zoom = W / v.w;
+  world.style.setProperty('--zoom', zoom);
+  world.style.transform = `translate(${(-v.x / W) * 100 * zoom}%, ${(-v.y / H) * 100 * zoom}%) scale(${zoom})`;
+}
+
+// ---------- what just happened ----------
+// Hits, misses and breaks float up from the fighter they landed on; a technique shown for the
+// first time gets a banner.
+export function showFx(game, list) {
+  const arena = document.querySelector('#field .arena');
+  if (!arena || !list.length) return;
+  const n = [0, 0];
+  for (const fx of list) {
+    const f = game.fighters[fx.on];
+    if (fx.kind === 'reveal') {
+      const el = div(`reveal theme-${f.theme}`, `<span>${f.name} shows</span><b>${fx.text}</b>`);
+      arena.querySelector('.reveals').appendChild(el);
+      setTimeout(() => el.remove(), 2600);
+      continue;
+    }
+    const token = arena.querySelector(`.ftoken[data-key="${fx.on}"]`);
+    if (!token) continue;
+    const el = div(`fx fx-${fx.kind}`, fx.text);
+    const delay = n[fx.on]++ * 280;
+    el.style.animationDelay = `${delay}ms`;
+    token.appendChild(el);
+    setTimeout(() => el.remove(), delay + 1700);
+    if (fx.kind === 'hit' || fx.kind === 'spirit') {
+      token.classList.remove('struck');
+      requestAnimationFrame(() => token.classList.add('struck'));
+      setTimeout(() => token.classList.remove('struck'), 600);
+    }
+  }
+}
 const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // Keep one child element per key inside `parent`: create missing ones, update all, remove stale ones.
@@ -50,7 +131,6 @@ function svg(tag, attrs = {}) {
   return el;
 }
 
-// An area's shape on the map: a circle, or a beam drawn as a rectangle along its line.
 function shapeEl(shape, cls) {
   if (shape.shape === 'line') {
     const { from, to, width } = shape;
@@ -66,7 +146,6 @@ function shapeEl(shape, cls) {
 const progress = (game, w) => Math.min(1, Math.max(0, (game.time - w.start) / Math.max(0.01, w.end - w.start)));
 const points = (from, path) => [from, ...path].map((p) => `${p.x},${p.y}`).join(' ');
 
-// Place an HTML element at a point on the arena.
 const pctOf = (game, p) => ({ left: `${(p.x / game.arena.width) * 100}%`, top: `${(p.y / game.arena.height) * 100}%` });
 function place(el, game, p) {
   Object.assign(el.style, pctOf(game, p));
@@ -110,13 +189,22 @@ function glide(el, game, f, now) {
   el.glide = el.animate(frames, { duration: Math.min(1400, 400 + 45 * len), easing: 'ease-in-out' });
 }
 
-// Build the arena once per layout: the floor grid, obstacles and the layers drawn over them.
 function build(root, game) {
   const { width: W, height: H } = game.arena;
-  root.innerHTML = `<div class="field-head"><span class="label">${game.arena.name}</span><span class="field-info"></span><span class="rng"></span></div>
-    <div class="arena-wrap"><div class="arena" style="aspect-ratio:${W} / ${H}; --aspect:${W / H}"><div class="arena-tip" hidden></div></div></div>`;
+  root.innerHTML = `<div class="field-head"><span class="label">${game.arena.name}</span><span class="rng"></span><span class="field-info"></span>
+      <span class="q-toggle"><button class="ghost" data-fview="follow">Follow</button><button class="ghost" data-fview="whole">Whole arena</button></span></div>
+    <div class="arena-wrap"><div class="arena"><div class="world" style="aspect-ratio:${W} / ${H}"><div class="arena-tip" hidden></div></div><div class="reveals"></div></div></div>`;
   const arena = root.querySelector('.arena');
-  arena.dataset.layout = `${game.arena.name}:areas`;
+  const world = arena.querySelector('.world');
+  arena.dataset.layout = `${game.arena.name}:world`;
+  new ResizeObserver(() => aim(world, view.game)).observe(arena);
+  root.querySelector('.q-toggle').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-fview]');
+    if (!b) return;
+    view.whole = b.dataset.fview === 'whole';
+    try { localStorage.setItem('fieldView', view.whole ? 'whole' : 'follow'); } catch { /* storage unavailable */ }
+    renderField(view.game, view.opts);
+  });
   const s = svg('svg', { class: 'arena-svg', viewBox: `0 0 ${W} ${H}` });
   const grid = svg('g', { class: 'grid' });
   for (let x = 2; x < W; x += 2) grid.appendChild(svg('line', { x1: x, y1: 0, x2: x, y2: H }));
@@ -128,8 +216,8 @@ function build(root, game) {
     s.appendChild(o);
   }
   for (const layer of ['areas', 'rings', 'sight', 'routes', 'plan', 'hover']) s.appendChild(svg('g', { class: layer }));
-  arena.prepend(s);
-  arena.appendChild(div('sight-label'));
+  world.prepend(s);
+  world.appendChild(div('sight-label'));
 
   arena.addEventListener('mousemove', (e) => {
     view.hoverAt = toPoint(arena, e);
@@ -154,13 +242,12 @@ function build(root, game) {
 
 // The arena point under the mouse, snapped to half a metre.
 function toPoint(arena, e) {
-  const r = arena.getBoundingClientRect();
+  const r = arena.querySelector('.world').getBoundingClientRect();
   const { width: W, height: H } = view.game.arena;
   const snap = (v) => Math.round(v * 2) / 2;
   return { x: snap(((e.clientX - r.left) / r.width) * W), y: snap(((e.clientY - r.top) / r.height) * H) };
 }
 
-// A targeted attack is open: the target nearest the mouse (the opponent, or one of their constructs).
 function snapTarget(p) {
   const list = view.reach ? view.reach.targets : [];
   let best = null;
@@ -171,8 +258,7 @@ function snapTarget(p) {
   return best && best.d < 3 ? best : null;
 }
 
-// Draw the hover, then tell the page what's under the mouse when that changes, so it can
-// preview the choice there (a move's time on the timeline, say).
+// Tell the page what's under the mouse when that changes, so it can preview the choice there.
 function drawHover(arena) {
   hoverValue = null;
   drawHoverAt(arena);
@@ -183,9 +269,6 @@ function drawHover(arena) {
   }
 }
 
-// Walking: the route to the spot under the mouse. Launch: the flight there.
-// While a targeted attack is open: which target the mouse is on, and whether it's in reach
-// (away from any target, walking as usual).
 function drawHoverAt(arena) {
   const layer = arena.querySelector('.hover');
   const tip = arena.querySelector('.arena-tip');
@@ -200,7 +283,7 @@ function drawHoverAt(arena) {
   tip.hidden = false;
   const t = view.reach ? snapTarget(view.hoverAt) : null;
   if (t) {
-    layer.appendChild(svg('circle', { class: `snap${t.ok ? '' : ' bad'}`, cx: t.at.x, cy: t.at.y, r: 1.1 }));
+    layer.appendChild(svg('circle', { class: `snap${t.ok ? '' : ' bad'}`, cx: t.at.x, cy: t.at.y }));
     tip.classList.toggle('bad', !t.ok);
     tip.textContent = t.ok ? `${t.label}${t.chance != null ? ` · ${Math.round(t.chance * 100)}% to hit` : ''} · click to target` : `${t.label}: ${t.why}`;
     if (t.ok) hoverValue = t.id;
@@ -236,7 +319,7 @@ function drawHoverAt(arena) {
   if (plan.error) {
     tip.textContent = plan.error;
     tip.classList.add('bad');
-    layer.appendChild(svg('circle', { class: 'spot bad', cx: view.hoverAt.x, cy: view.hoverAt.y, r: 0.35 }));
+    layer.appendChild(svg('circle', { class: 'spot bad', cx: view.hoverAt.x, cy: view.hoverAt.y }));
     return;
   }
   tip.classList.remove('bad');
@@ -247,17 +330,18 @@ function drawHoverAt(arena) {
   const g = svg('g', { class: `theme-${f.theme}` });
   hoverValue = A.pointText(view.hoverAt);
   g.appendChild(svg('polyline', { class: 'route hover-route', points: points(plan.from, plan.path) }));
-  g.appendChild(svg('circle', { class: 'spot', cx: plan.dest.x, cy: plan.dest.y, r: 0.35 }));
+  g.appendChild(svg('circle', { class: 'spot', cx: plan.dest.x, cy: plan.dest.y }));
   layer.appendChild(g);
 }
 
-// opts.picking: index of the fighter choosing a destination (a person's turn), or null.
-// opts.plan: a route to show as a ghost ({ who, from, path }), e.g. the hovered move card's.
+// opts.picking: index of the fighter choosing a spot (a person's decision), or null.
+// opts.plan: a route to show as a ghost ({ who, from, path }).
 // opts.onPick: called with "x:y" when the field is clicked while picking.
 export function renderField(game, opts = {}) {
   const root = document.getElementById('field');
   if (!root) return;
   view.game = game;
+  view.opts = opts;
   view.aiming = opts.aiming || null;
   view.reach = opts.reach || null;
   view.flight = opts.flight || null;
@@ -267,12 +351,14 @@ export function renderField(game, opts = {}) {
   view.onHover = opts.onHover || null;
   // A new decision: report the spot under the mouse afresh.
   if (view.decision !== game.decision) { view.decision = game.decision; lastHover = 'none'; }
-  if (root.querySelector('.arena')?.dataset.layout !== `${game.arena.name}:areas`) build(root, game);
+  if (root.querySelector('.arena')?.dataset.layout !== `${game.arena.name}:world`) build(root, game);
   const arena = root.querySelector('.arena');
+  const world = arena.querySelector('.world');
+  aim(world, game);
+  root.querySelectorAll('[data-fview]').forEach((b) => b.classList.toggle('on', (b.dataset.fview === 'whole') === view.whole));
   const pos = game.fighters.map((f) => game.pos(f));
   const sight = game.sight(pos[0], pos[1]);
 
-  // The range, shown once: the band the fighters are in, with the gap.
   root.querySelector('.field-info').textContent = sight.blockedBy ? `a ${sight.blockedBy.name} blocks the line between them` : '';
   root.querySelector('.rng').innerHTML = RANGES.map((r, i) => `<span class="${i === sight.band ? 'on' : ''}">${r}${i === sight.band ? ` · ${fmt(sight.dist)} m` : ''}</span>`).join('');
 
@@ -280,15 +366,14 @@ export function renderField(game, opts = {}) {
   const acting = game.prompt && game.prompt.fighter != null ? game.fighters[game.prompt.fighter] : game.fighters[0];
   const rings = arena.querySelector('.rings');
   rings.setAttribute('class', `rings theme-${acting.theme}`);
-  // An open targeted attack shows its own reach instead: best distance dashed, farthest solid,
-  // and marks each target in or out of reach.
+  // An open targeted attack shows its own reach instead: best distance dashed, farthest solid.
   if (view.reach) {
     const at = pos[acting.index];
     const { best, max } = view.reach.spec;
     const els = [];
     if (Number.isFinite(max)) els.push(svg('circle', { class: 'reach', cx: at.x, cy: at.y, r: max }));
     if (best < (Number.isFinite(max) ? max - 0.01 : 60)) els.push(svg('circle', { class: 'reach best', cx: at.x, cy: at.y, r: best }));
-    for (const t of view.reach.targets) els.push(svg('circle', { class: `target${t.ok ? '' : ' out'}${t.chosen ? ' chosen' : ''}`, cx: t.at.x, cy: t.at.y, r: 0.9 }));
+    for (const t of view.reach.targets) els.push(svg('circle', { class: `target${t.ok ? '' : ' out'}${t.chosen ? ' chosen' : ''}`, cx: t.at.x, cy: t.at.y }));
     rings.replaceChildren(...els);
   } else rings.replaceChildren(...A.BANDS.map((r) => svg('circle', { cx: pos[acting.index].x, cy: pos[acting.index].y, r })));
 
@@ -308,7 +393,7 @@ export function renderField(game, opts = {}) {
     if (!r) return g;
     g.appendChild(svg('polyline', { class: 'route', points: points(r.from, r.path) }));
     const end = r.path[r.path.length - 1];
-    g.appendChild(svg('circle', { class: 'spot', cx: end.x, cy: end.y, r: 0.35 }));
+    g.appendChild(svg('circle', { class: 'spot', cx: end.x, cy: end.y }));
     g.appendChild(svg('title')).textContent = `${f.name}: ${f.flight ? 'flying' : `walking ${game.walkText(f)}`}${arr != null ? `, arrives t=${fmt(arr)}` : ''}`;
     return g;
   }));
@@ -337,17 +422,17 @@ export function renderField(game, opts = {}) {
   }
   arena.querySelector('.areas').replaceChildren(...areas);
 
-  // A previewed route (hovering a move card, or the destination already chosen).
+  // A previewed route: the walk order being chosen, or a Launch.
   const plan = opts.plan;
   arena.querySelector('.plan').replaceChildren(...(plan ? [(() => {
     const g = svg('g', { class: `theme-${game.fighters[plan.who].theme}` });
     g.appendChild(svg('polyline', { class: 'route plan-route', points: points(plan.from, plan.path) }));
     const end = plan.path[plan.path.length - 1];
-    g.appendChild(svg('circle', { class: 'spot', cx: end.x, cy: end.y, r: 0.35 }));
+    g.appendChild(svg('circle', { class: 'spot', cx: end.x, cy: end.y }));
     return g;
   })()] : []));
 
-  sync(arena, '.ftoken', game.fighters, (f) => f.index, (f) => div(`ftoken theme-${f.theme}`, `
+  sync(world, '.ftoken', game.fighters, (f) => f.index, (f) => div(`ftoken theme-${f.theme}`, `
       <div class="fstars"></div><div class="fbody"><div class="fbarrier"></div><div class="fdot">${f.name[0]}</div></div>
       <div class="fwindups"></div><div class="fname">${f.name}</div><div class="fstances"></div>`),
   (el, f) => {
@@ -356,7 +441,6 @@ export function renderField(game, opts = {}) {
     el.querySelector('.fdot').textContent = f.name[0];
     el.querySelector('.fname').textContent = f.name;
     glide(el, game, f, pos[f.index]);
-    // Labels go on the side away from the opponent, so the two don't overlap.
     el.classList.toggle('right', pos[f.index].x > pos[1 - f.index].x);
     el.classList.toggle('moving', !!(f.walk || f.flight));
     el.classList.toggle('acting', acting === f && !!game.prompt && game.prompt.kind !== 'over');

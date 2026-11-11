@@ -1,6 +1,4 @@
-// Turn plans: one per kind of action. Each works out everything about a turn choice once
-// (see Game.plan in engine.js): the preview, the cost, when the fighter acts next, the ghost
-// queue items, the expected effect on the bars, and what it starts when chosen.
+// Turn plans, one per kind of action (see Game.plan in engine.js).
 import * as R from './rules.js';
 import * as A from './arena.js';
 import { fmt, pct } from './format.js';
@@ -8,8 +6,7 @@ import { fmt, pct } from './format.js';
 const EPS = 1e-9;
 const { STAR } = R;
 // Each takes the game, the acting fighter and { key, t, amount, target, o, spd, tc } (t: the
-// technique, o: the opponent, spd: the fighter's Speed, tc: the construct aimed at, if any) and
-// returns a plan as described at Game.plan.
+// technique, o: the opponent, tc: the construct aimed at, if any).
 export const TURN = { turn: true }; // a plan's queue entry for the fighter's next turn
 const notEnough = { enabled: false, reason: 'Not enough madra', lines: [] };
 
@@ -21,7 +18,7 @@ export const PLANS = {
     const w = R.physTime(R.TIMING.strikeWindup, spd);
     if (!tc && !g.strikeLands(f, prof, w, g.time)) {
       const h = g.hypo;
-      if (h.kept && !(h.walk && h.walk.follow)) h.walk = { follow: true };
+      if (h.kept && !g.closingIn(h.walk)) h.walk = { hold: A.TOWARD_GAP };
       const at = g.strikeStart(f, prof, w);
       const giveUp = g.time + R.TIMING.chaseMax;
       const lands = at != null ? at + w : null;
@@ -58,31 +55,14 @@ export const PLANS = {
     };
   },
 
-  // Walking with nothing else to do: the next turn comes on arrival, as things stand now.
-  move(g, f, { spd }) {
-    const h = g.hypo;
-    const rate = `${fmt(R.TIMING.moveRate * (spd / 100) ** 2)} m per tick at your Speed, around obstacles`;
-    if (h.error) return { enabled: false, reason: h.error, lines: [rate] };
-    if (!h.walk) return { enabled: false, reason: h.kept ? 'Choose where to go: click the field' : 'Already there', lines: [rate] };
-    const o = g.opponent(f);
-    if (h.walk.follow && A.dist(f.pos, g.pos(o)) <= A.TOWARD_GAP + 0.05) return { enabled: false, reason: `Already next to ${o.name}`, lines: [rate] };
-    const arr = g.arrival(f, R.TIMING.waitMax);
-    const next = g.time + Math.max(R.TIMING.moveMin, arr != null ? arr - g.time : R.TIMING.waitMax);
-    return {
-      enabled: true, reason: '', lines: g.moveLines(f, h.walk, arr, next),
-      nextTurn: next,
-      queue: arr != null ? [{ time: arr, label: 'arrives', type: 'move' }, TURN] : [TURN],
-      path: g.routeAhead(f, arr ?? next),
-      apply: () => g.addLog(`${f.name} walks ${g.walkText(f)}${arr != null ? ` (arrives t=${fmt(arr)})` : ''}.`, '', f.index),
-    };
-  },
-
   wait(g, f, { amount }) {
     const t = R.waitTime(amount);
+    const arr = g.hypo.walk ? g.arrival(f, R.TIMING.waitMax) : null;
     return {
       enabled: true, reason: '', lines: [`Next turn in ${fmt(t)}`],
       nextTurn: g.time + t,
-      queue: [TURN],
+      arrival: arr,
+      queue: arr != null && arr <= g.time + t + EPS ? [{ time: arr, label: 'arrives', type: 'move' }, TURN] : [TURN],
       apply: () => g.addLog(`${f.name} waits ${fmt(t)} ticks.`, 'dim', f.index),
     };
   },
@@ -177,14 +157,14 @@ export const PLANS = {
   pulse(g, f, { t, amount, o }) {
     if (g.maxMadra(f, t) < t.minMadra) return notEnough;
     const madra = g.madraFor(f, t, amount);
-    const w = g.twind(t, R.nominalWindup(madra, t.divisor), f.stats.control);
+    const w = g.scaledWindup(f, t, madra);
     const gate = g.rangeGate(f, t, g.time + w);
     const targets = g.pulseTargets(o, madra, t.ranges);
     const lines = [
       `Wind-up ${fmt(w)} (lands t=${fmt(g.time + w)}) · next turn in ${fmt(w)}`,
       `Cancels ${o.name}'s wind-ups, stances, constructs and zones (ones you stand in) costing up to ${fmt(madra / 2)} · no roll`,
       targets.length ? `Right now: ${targets.map((x) => `${x.name} (${fmt(x.cost)})`).join(', ')}` : `Nothing of ${o.name}'s is that cheap right now`,
-      `${o.name} can block it: each madra takes 1.5 off its strength`,
+      `${o.name} can block it: each madra takes ${R.BLOCK_SOAK} off its strength`,
     ];
     if (gate.note) lines.push(gate.note);
     return {
@@ -297,7 +277,6 @@ export const PLANS = {
     };
   },
 
-  // A damaging technique: single-target (rolled) or an area (no roll).
   attack(g, f, ctx) {
     const s = scaled(g, f, ctx);
     if (!s) return notEnough;
@@ -357,12 +336,11 @@ export const PLANS = {
   },
 };
 
-// The shared part of techniques that scale with madra (stars, barriers, attacks): the madra
-// used, its wind-up, what it costs, and the timing line. Null if there isn't enough madra.
+// The shared part of techniques that scale with madra. Null if there isn't enough madra.
 function scaled(g, f, { t, amount }) {
   if (g.maxMadra(f, t) < (t.minMadra || 1)) return null;
   const madra = g.madraFor(f, t, amount);
-  const w = g.twind(t, R.nominalWindup(madra, t.divisor), f.stats.control);
+  const w = g.scaledWindup(f, t, madra);
   const next = t.ruler ? R.TIMING.actWhileBuilding : w;
   const timing = `${t.costMult ? `Costs ${fmt(madra * t.costMult)} madra · ` : ''}Wind-up ${fmt(w)} (lands t=${fmt(g.time + w)}) · next turn in ${fmt(next)}${t.ruler ? ' (Ruler: act while it builds)' : ''}`;
   return { madra, w, cost: madra * (t.costMult || 1), timing };

@@ -1,37 +1,32 @@
-// Core formulas from stats.md and techniques.md.
-
 export const RANGES = ['Close', 'Mid', 'Far'];
 
 export const TIMING = {
-  strikeWindup: 2,      // physical, scaled by Speed
-  moveRate: 2,          // metres per tick at Speed 100; physical, so scaled by Speed
-  moveMin: 0.5,         // the soonest a Move gives your next turn
-  paceStriker: 2 / 3,   // walking pace while winding up a Striker (or other non-Forger, non-Ruler) technique
-  paceSlow: 1 / 3,      // walking pace while winding up a Forger or Ruler technique
-  reroute: 0.5,         // changing course as a reaction pushes your next turn this much later; physical, scaled by Speed
-  chaseMax: 6,          // a strike waiting to come into reach gives up after this many ticks
-  dodge: 2,             // physical, scaled by Speed; pushes your next action later
-  sidestep: 2,          // metres a dodge carries you out of an area at Speed 100, scaled by Speed
-  blockDelay: 1,        // pushes your next action later
+  // Physical times shrink with Speed squared; technique times with Control.
+  strikeWindup: 2,
+  moveRate: 2,           // metres per tick
+  moveMin: 0.5,
+  paceStriker: 2 / 3,
+  paceSlow: 1 / 3,       // Forger and Ruler wind-ups
+  reroute: 0.5,          // a change of course as a reaction
+  chaseMax: 6,           // a strike waiting to come into reach gives up
+  dodge: 2,
+  sidestep: 2,           // metres
+  blockDelay: 1,
   waitDefault: 2,
   waitMin: 0.5,
   waitMax: 10,
-  actWhileBuilding: 1.5, // techniques that build while you act (Ruler techniques, barriers, Crown stars): next turn this soon after starting
-  stanceWindup: 1,      // technique wind-up, scaled by Control
-  reraiseDelay: 4,      // scaled by Control
-  interruptStagger: 1,  // an interrupted fighter's next action comes this soon
+  actWhileBuilding: 1.5, // Ruler techniques, barriers, Crown stars: next turn this soon after starting
+  stanceWindup: 1,
+  reraiseDelay: 4,
+  interruptStagger: 1,
 };
 
-// How long a wait is: as chosen, within the limits.
 export function waitTime(t) {
   return Math.min(TIMING.waitMax, Math.max(TIMING.waitMin, Number(t) || TIMING.waitDefault));
 }
 
-// Crown stars: 2 spiritual damage per madra before reduction, +1 to hit. Dropping stars takes
-// 0.5 ticks and they land 0.5 ticks later.
 export const STAR = { damagePerMadra: 2, toHit: 1, dropTime: 0.5 };
 
-// Constructs don't dodge; rolled attacks against them need to beat this.
 export const CONSTRUCT_DEFENSE = 10;
 
 export const STRIKE_DAMAGE = 10;
@@ -39,20 +34,28 @@ export const STRIKE_DAMAGE = 10;
 // Area attacks can't miss, so they pay for it in damage.
 export const AREA_EFFICIENCY = 0.75;
 
-// A zone lingers and pulses for its whole life: all its pulses together deal this many times
-// what the same madra would as a one-off area attack. Leaving it early takes less.
+// All of a zone's pulses together, against a one-off area attack of the same madra.
 export const ZONE_TOTAL = 1.5;
-// The most a zone can slow those inside it.
 export const ZONE_SLOW_MAX = 0.5;
 
-export function nominalWindup(madra, divisor = 3) {
-  return Math.max(1, madra / divisor);
+// Ruler techniques draw on aura as they build: they take this many times the channel cap.
+export const RULER_CAP = 2;
+
+// Madra comes back at this share of the pool per tick.
+export const REGEN = 0.003;
+
+// The dial: wind-up grows faster than madra, and damage per madra grows with it too. So a
+// small technique is quick and a big one is efficient. At TYPICAL_CAP madra the wind-up is
+// madra / divisor.
+export const TYPICAL_CAP = 15;
+export const WINDUP_MIN = 1;
+
+export function windup(madra, divisor = 3) {
+  return (madra / divisor) * Math.sqrt(madra / TYPICAL_CAP);
 }
 
-// Damage per madra. Based on madra (as if the wind-up were madra / 3), so faster-scaling
-// techniques don't lose damage; techniques with a longer wind-up than that get extra.
-export function efficiency(madra, nominal) {
-  return Math.min(2.2, 1.2 + 0.1 * Math.max(madra / 3, nominal));
+export function efficiency(madra, divisor = 3) {
+  return Math.min(2.2, 1.2 + (0.1 * madra) / Math.min(3, divisor));
 }
 
 export function techWindup(nominal, control) {
@@ -63,7 +66,6 @@ export function controlFactor(control) {
   return 1 - 0.05 * control;
 }
 
-// Speed counts squared, so fast fighters act much more often.
 export function physTime(base, speed) {
   return base * (100 / speed) ** 2;
 }
@@ -76,7 +78,6 @@ export function dodgeBonus(defenderSpeed, attackerSpeed) {
   return Math.max(0, 2 + speedMod(defenderSpeed, attackerSpeed));
 }
 
-// Chance that 2d6 >= target. No automatic hits.
 export function chanceAtLeast(target) {
   let count = 0;
   for (let a = 1; a <= 6; a++) for (let b = 1; b <= 6; b++) if (a + b >= target) count++;
@@ -89,41 +90,37 @@ export function roll2d6(rng) {
   return [a, b];
 }
 
-// A hit interrupts if, after damage reduction, it deals at least 1.6 x Control% of max Health.
+// After reduction, as a share of max Health.
 export function interruptThreshold(stats) {
   return ((1.6 * stats.control) / 100) * stats.health;
 }
 
-// Stances are held more firmly than wind-ups: breaking one takes twice the interrupt threshold.
 export const STANCE_BREAK_MULT = 2;
 
-// Dodging an area attack is a quick sidestep straight out of it: this far, scaled by Speed
-// like walking. If it takes you outside (or behind cover), the attack misses you.
 export function sidestep(speed) {
   return TIMING.sidestep * (speed / 100) ** 2;
 }
 
-// A block soaks this much damage in all, per madra, spread over the attack's hits.
+// A block trades madra for damage one for one, in all, across the attack's hits.
+export const BLOCK_SOAK = 1;
 export function blockReduction(madra) {
-  return 1.5 * madra;
+  return BLOCK_SOAK * madra;
 }
 
-// Black Flame burns its user for the madra they spend: 1 health per 5, 1 spirit per 10.
+// Black Flame burns its user for the madra they spend.
 export function burn(madra) {
   return { health: madra / 5, spirit: madra / 10 };
 }
 
-// ---------- range ----------
-// Distances are in metres. Close, Mid and Far are shorthand for 2, 10 and 20 m.
+// Close, Mid and Far, in metres.
 export const RANGE_METRES = [2, 10, 20];
-// Past its best distance an attack takes -1 to hit for every this many metres (rounded up).
+// Past its best distance an attack takes -1 to hit for every this many metres.
 export const FALLOFF = 4;
 
-// What a technique (or attack profile) can reach, in metres: { min, max, best }.
-// Written either directly (reach, minReach, best) or as bands (ranges, bestRange): reaching Far
-// means no limit; best at Far means 20 m.
+// { min, max, best } in metres, from bands (ranges, bestRange) or direct values (reach,
+// minReach, best). Reaching Far means no limit.
 export function rangeSpec(t) {
-  // A saved fight stores an unlimited reach as null (JSON has no Infinity).
+  // A saved fight stores Infinity as null.
   if (t.reachSpec) return { ...t.reachSpec, max: t.reachSpec.max ?? Infinity };
   const ranges = t.ranges || [0];
   const top = Math.max(...ranges);
@@ -137,12 +134,10 @@ export function rangeSpec(t) {
 
 export const inReach = (spec, d) => d <= spec.max + 1e-6 && d >= spec.min - 1e-6;
 
-// -1 to hit for every FALLOFF metres (or part of it) past the best distance.
 export function rangePenalty(d, spec) {
   return d <= spec.best + 1e-6 ? 0 : Math.ceil((d - spec.best - 1e-6) / FALLOFF);
 }
 
-// How a reach reads: "Close", "up to 10 m", "any range".
 export function reachText(spec) {
   if (spec.max === Infinity) return spec.min > 0 ? `${spec.min} m or more` : 'any range';
   if (spec.max <= RANGE_METRES[0]) return 'Close';

@@ -7,7 +7,6 @@ const span = (min, max) => (min === max ? `${R[min]} range` : `${R[min]}–${R[m
 const rangeList = (min, max) => Array.from({ length: Math.max(0, max - min) + 1 }, (_, i) => min + i);
 const pct = (x) => `${Math.round(x * 100)}%`;
 
-// Knob helpers.
 const num = (key, label, min, max, step, def) => ({ key, label, type: 'number', min, max, step, def });
 const bool = (key, label, def = false) => ({ key, label, type: 'bool', def });
 const pick = (key, label, options, def) => ({ key, label, type: 'select', options, def });
@@ -36,38 +35,38 @@ export const TEMPLATES = {
     label: 'Striker attack', type: 'Striker',
     knobs: [DTYPE, num('effMult', 'Damage ×', 0.6, 1.4, 0.05, 1), num('toHit', 'To hit', -2, 2, 1, 0), MIN_R(0), MAX_R(2), pick('bestRange', 'Best range', RANGE_OPTS, 1)],
     make: (k) => ({ kind: 'attack', divisor: 4, dtype: k.dtype === 'spiritual' ? 'spiritual' : undefined, effMult: k.effMult, toHit: k.toHit, ranges: rangeList(k.minRange, k.maxRange), bestRange: k.bestRange }),
-    describe: (k) => `A shot that scales with madra (wind-up madra ÷ 4), ${k.effMult !== 1 ? `${k.effMult}× damage, ` : ''}${k.dtype === 'spiritual' ? 'spiritual damage, ' : ''}${k.toHit ? `${k.toHit > 0 ? '+' : ''}${k.toHit} to hit, ` : ''}${span(k.minRange, k.maxRange)}, best at ${R[k.bestRange]}.`,
+    describe: (k) => `A shot that scales with madra (wind-up ÷ 4), ${k.effMult !== 1 ? `${k.effMult}× damage, ` : ''}${k.dtype === 'spiritual' ? 'spiritual damage, ' : ''}${k.toHit ? `${k.toHit > 0 ? '+' : ''}${k.toHit} to hit, ` : ''}${span(k.minRange, k.maxRange)}, best at ${R[k.bestRange]}.`,
   },
   area: {
     label: 'Area attack', type: 'Striker / Ruler',
     knobs: [DTYPE, num('effMult', 'Damage ×', 0.6, 1.4, 0.05, 1), MIN_R(0), MAX_R(1), ...AREA_KNOBS, bool('bladeHits', 'Extra hit per other blade')],
     make: (k) => ({ kind: 'attack', divisor: 3, area: true, dtype: k.dtype === 'spiritual' ? 'spiritual' : undefined, effMult: k.effMult, ranges: rangeList(k.minRange, k.maxRange), ...areaFields(k), bladeHits: k.bladeHits }),
-    describe: (k) => `Area attack, no roll, ${areaText(k)}; wind-up madra ÷ 3${k.effMult !== 1 ? `, ${k.effMult}× damage` : ''}${k.dtype === 'spiritual' ? ', spiritual damage' : ''}${k.bladeHits ? '; one extra hit per other blade close to the target' : ''}.`,
+    describe: (k) => `Area attack, no roll, ${areaText(k)}; wind-up ÷ 3${k.effMult !== 1 ? `, ${k.effMult}× damage` : ''}${k.dtype === 'spiritual' ? ', spiritual damage' : ''}${k.bladeHits ? '; one extra hit per other blade close to the target' : ''}.`,
   },
   line: {
     label: 'Line (beam)', type: 'Striker',
     knobs: [DTYPE, num('effMult', 'Damage ×', 0.6, 1.4, 0.05, 1), num('length', 'Length (m)', 2, 12, 1, 6), num('lengthPerMadra', 'Length per madra (m)', 0, 2, 0.25, 1), num('width', 'Width (m)', 0.5, 4, 0.25, 1.5)],
     make: (k) => ({ kind: 'attack', divisor: 4, area: true, shape: 'line', dtype: k.dtype === 'spiritual' ? 'spiritual' : undefined, effMult: k.effMult, length: k.length, lengthPerMadra: k.lengthPerMadra, width: k.width, ranges: [0, 1, 2] }),
-    describe: (k) => `A straight beam from you toward a point you pick: ${k.length} m${k.lengthPerMadra ? ` + ${k.lengthPerMadra} m per madra` : ''} long (up to 24 m), ${k.width} m wide, stopping at the first obstacle. No roll: it hits everything in its path${k.effMult !== 1 ? `, ${k.effMult}× damage` : ''}${k.dtype === 'spiritual' ? ', spiritual damage' : ''}; wind-up madra ÷ 4.`,
+    describe: (k) => `A straight beam from you toward a point you pick: ${k.length} m${k.lengthPerMadra ? ` + ${k.lengthPerMadra} m per madra` : ''} long (up to 24 m), ${k.width} m wide, stopping at the first obstacle. No roll: it hits everything in its path${k.effMult !== 1 ? `, ${k.effMult}× damage` : ''}${k.dtype === 'spiritual' ? ', spiritual damage' : ''}; wind-up ÷ 4.`,
   },
   zone: {
     label: 'Zone (lingering Ruler field)', type: 'Ruler',
     knobs: [DTYPE, num('effMult', 'Damage ×', 0, 1.4, 0.05, 1), MIN_R(0), MAX_R(1), ...AREA_KNOBS.map((x) => (x.key === 'fills' ? { ...x, def: true } : x)),
       num('duration', 'Lasts (ticks)', 2, 16, 1, 8), num('every', 'Pulses every (ticks)', 1, 8, 1, 4), num('slowPerMadra', 'Slow per madra (%)', 0, 5, 0.5, 0)],
     make: (k) => ({ kind: 'attack', divisor: 2, area: true, ruler: true, dtype: k.dtype === 'spiritual' ? 'spiritual' : undefined, effMult: k.effMult, ranges: rangeList(k.minRange, k.maxRange), ...areaFields(k), zone: { duration: k.duration, every: k.every, slowPerMadra: k.slowPerMadra / 100 } }),
-    describe: (k) => `A field that settles ${areaText(k)} after its wind-up and stays ${k.duration} ticks, pulsing when it forms and every ${k.every} after${k.effMult > 0 ? ` (its pulses together deal 1.5× an area attack${k.effMult !== 1 ? `, × ${k.effMult}` : ''})` : ' (no damage)'}${k.slowPerMadra ? `; −${k.slowPerMadra}% Speed per madra to anyone of the opponent's inside (up to 50%)` : ''}. Ruler: no channel cap, and you act again soon while it builds.`,
+    describe: (k) => `A field that settles ${areaText(k)} after its wind-up and stays ${k.duration} ticks, pulsing when it forms and every ${k.every} after${k.effMult > 0 ? ` (its pulses together deal 1.5× an area attack${k.effMult !== 1 ? `, × ${k.effMult}` : ''})` : ' (no damage)'}${k.slowPerMadra ? `; −${k.slowPerMadra}% Speed per madra to anyone of the opponent's inside (up to 50%)` : ''}. Ruler: up to twice your channel cap, and you act again soon while it builds.`,
   },
   empowered: {
     label: 'Empowered strike', type: 'Enforcer',
     knobs: [num('effMult', 'Damage ×', 0.6, 1.4, 0.05, 1), num('toHit', 'To hit', -2, 2, 1, 0)],
-    make: (k) => ({ kind: 'attack', divisor: 3, dtype: 'physical', base: 10, physical: true, weaponBonus: true, ranges: [0], bestRange: 0, effMult: k.effMult, toHit: k.toHit }),
-    describe: (k) => `A physical blow powered by madra: 10 + weapon + madra × efficiency${k.effMult !== 1 ? ` (× ${k.effMult})` : ''}${k.toHit ? `, ${k.toHit > 0 ? '+' : ''}${k.toHit} to hit` : ''}. Close range only; if broken, it still lands as a plain strike.`,
+    make: (k) => ({ kind: 'attack', divisor: 3, dtype: 'physical', strike: true, ranges: [0], bestRange: 0, effMult: k.effMult, toHit: k.toHit }),
+    describe: (k) => `A strike with madra riding on it: the strike's damage and time, plus madra × efficiency${k.effMult !== 1 ? ` (× ${k.effMult})` : ''} and that much more wind-up${k.toHit ? `, ${k.toHit > 0 ? '+' : ''}${k.toHit} to hit` : ''}. Close range only; if broken, it still lands as a plain strike.`,
   },
   ruler: {
     label: 'Ruler technique', type: 'Ruler',
     knobs: [DTYPE, num('effMult', 'Damage ×', 0.6, 1.4, 0.05, 1), MIN_R(0), MAX_R(1), ...AREA_KNOBS],
     make: (k) => ({ kind: 'attack', divisor: 2, area: true, ruler: true, dtype: k.dtype === 'spiritual' ? 'spiritual' : undefined, effMult: k.effMult, ranges: rangeList(k.minRange, k.maxRange), ...areaFields(k) }),
-    describe: (k) => `Long build-up, then a wide blast: no channel cap, wind-up madra ÷ 2, and you act again soon while it builds. Area attack, no roll, ${areaText(k)}${k.effMult !== 1 ? `, ${k.effMult}× damage` : ''}.`,
+    describe: (k) => `Long build-up, then a wide blast: up to twice your channel cap, wind-up ÷ 2, and you act again soon while it builds. Area attack, no roll, ${areaText(k)}${k.effMult !== 1 ? `, ${k.effMult}× damage` : ''}.`,
   },
   stance: {
     label: 'Stance', type: 'Enforcer stance',
@@ -120,9 +119,9 @@ export const TEMPLATES = {
   },
   pulse: {
     label: 'Madra pulse', type: 'Striker / Ruler',
-    knobs: [num('divisor', 'Wind-up: madra ÷', 4, 8, 1, 6)],
+    knobs: [num('divisor', 'Wind-up ÷', 4, 8, 1, 6)],
     make: (k) => ({ kind: 'pulse', divisor: k.divisor, minMadra: 2, area: true, ranges: [0] }),
-    describe: (k) => `At Close range, cancels the opponent's wind-ups, stances and constructs that cost at most half the madra put in (wind-up madra ÷ ${k.divisor}). They can block it. No damage, no roll.`,
+    describe: (k) => `At Close range, cancels the opponent's wind-ups, stances and constructs that cost at most half the madra put in (wind-up ÷ ${k.divisor}). They can block it. No damage, no roll.`,
   },
 };
 
@@ -141,7 +140,7 @@ export function compileTechnique(pathId, entry) {
   const base = clean({ id, name: entry.name || tpl.label, type: tpl.type, cost: entry.cost || undefined, desc, ...tpl.make(knobs) });
   if (entry.template !== 'crown') return [base];
   return [
-    { ...base, label: 'Forge a star', card: id, cardDesc: desc, desc: 'Forge one star; the madra you put in sets its size and it forms after madra ÷ 2 ticks, but your next turn comes after 1.5 ticks.' },
+    { ...base, label: 'Forge a star', card: id, cardDesc: desc, desc: 'Forge one star; the madra you put in sets its size and it takes a while to form, but your next turn comes after 1.5 ticks.' },
     { id: `${id}-drop`, name: base.name, label: 'Drop stars', card: id, kind: 'command', type: tpl.type, desc: 'Drop any number of forged stars, biggest first. They land 0.5 ticks later as one attack with a hit per star.' },
   ];
 }
@@ -207,7 +206,6 @@ export function applyCustomThemes() {
     .map((d) => `.theme-${themeKey(d.id)} { --accent: ${d.color}; --accent-dim: ${dimColor(d.color)}; }`).join(' ');
 }
 
-// ---------- storage ----------
 const KEY = 'customPaths';
 export function loadPathDrafts() {
   try {

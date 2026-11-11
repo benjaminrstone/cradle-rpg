@@ -1,8 +1,6 @@
-// Claude as a player. When a side is handed to Claude, the app saves the board to the
-// server after every change (.duel/state.json), and applies Claude's moves from /api/move
-// whenever that side has a decision to make. Claude plays either through the API (the server
-// asks the Claude API for each move; see claude_player.py) or from a chat (Claude runs the
-// scripts in tools/).
+// Claude as a player. When a side is handed to Claude, the app saves the board to the server
+// after every change and applies Claude's moves from /api/move. Claude plays through the API
+// (claude_player.py) or from a chat (the scripts in tools/).
 import { fmt } from './engine.js';
 import { RANGES } from './rules.js';
 import { BANDS } from './arena.js';
@@ -91,7 +89,7 @@ export function waitingPanel(game) {
   }
   if (p.kind === 'course') {
     const after = game.fighters[p.after];
-    incoming = `<div class="incoming theme-${after.theme}">${after.name} has just acted: ${f.name} can change course.</div>`;
+    incoming = `<div class="incoming theme-${after.theme}">${after.name} has started an area that would catch ${f.name}: ${f.name} can walk out of it.</div>`;
   }
   const what = p.kind === 'reaction' ? 'reaction' : p.kind === 'course' ? 'choice of course' : 'move';
   const api = state.via === 'api' ? state.api : null;
@@ -139,8 +137,7 @@ export function syncClaude(game) {
   }
 }
 
-// Claude's recent decisions through the API: the summary of its thinking, its note to itself,
-// and the move it made. Newest first.
+// Claude's recent decisions through the API, newest first.
 function renderMind(game) {
   const panel = document.getElementById('claude-mind');
   const api = state.via === 'api' && state.side != null ? state.api : null;
@@ -329,8 +326,7 @@ function snapshot(game) {
     options = game.turnOptions(cur).map((o) => {
       const amount = o.slider ? o.slider.initial : 0;
       const pv = game.preview(cur, o.key, amount);
-      // Moves need a destination: show where heading straight toward or away would take you.
-      // Areas set at a point need a centre: show putting it on the opponent.
+      // A Launch needs somewhere to land, and an area set at a point needs a centre.
       const ways = o.point ? Object.fromEntries((o.point.area ? ['them'] : ['toward', 'away']).map((w) => {
         const wp = game.preview(cur, o.key, amount, w);
         return [w, { enabled: wp.enabled, reason: wp.reason, preview: wp.lines.filter(Boolean) }];
@@ -373,7 +369,7 @@ function snapshot(game) {
   if (p && p.kind === 'course') {
     const f = game.fighters[p.fighter];
     const after = game.fighters[p.after];
-    const ways = Object.fromEntries(['keep', 'toward', 'away', 'stop'].map((w) => {
+    const ways = Object.fromEntries(['keep', 'toward', 'hold:10', 'hold:20', 'stop'].map((w) => {
       const c = game.coursePreview(w);
       return [w, { enabled: c.enabled, reason: c.reason, preview: c.lines }];
     }));

@@ -53,7 +53,7 @@ function render() {
         <span class="b-step">
           <button data-b-stat="${k}" data-d="-1" ${n <= -STAT_FLOOR ? 'disabled' : ''}>−</button>
           <b>${fmtStep(n)}</b>
-          <button data-b-stat="${k}" data-d="1">+</button>
+          <button data-b-stat="${k}" data-d="1" title="The next step up costs ${Math.max(1, n + 1)}">+</button>
         </span>
         <span class="b-cost ${statCost(draft, k) < 0 ? 'refund' : ''}">${n ? `${statCost(draft, k)} pt` : ''}</span>
         <span class="muted small">${STAT_STEP[k]} per step</span>
@@ -131,10 +131,10 @@ function render() {
           </div>
           <div class="b-cols">
             <div><div class="section-label">Stats</div>${statRows}
-              <div class="muted small b-note">Each step up costs 1 point; each step down pays back 1, down to −3 per stat.</div>
+              <div class="muted small b-note">Each step up costs one more than the last (1, 2, 3…); each step down pays back 1, down to −3 per stat.</div>
               ${gear}</div>
             <div><div class="section-label">Techniques</div>${techRows}
-              <div class="muted small b-note">Refinements cost 1 point per step up (at most ${REFINE_UP_LIMIT} per technique); each step down pays back 1 (at most ${REFINE_DOWN_LIMIT}).</div></div>
+              <div class="muted small b-note">Refinements are priced the same way: each step up costs one more than the last (at most ${REFINE_UP_LIMIT} per technique); each step down pays back 1 (at most ${REFINE_DOWN_LIMIT}).</div></div>
           </div>
           <div class="b-actions">
             <button data-b-save ${c.left < 0 ? 'disabled' : ''}>${saved.some((b) => b.id === draft.id) ? 'Save changes' : 'Save build'}</button>

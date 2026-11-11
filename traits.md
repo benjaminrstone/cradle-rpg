@@ -14,7 +14,7 @@ Grows with stage, letting you make more kinds of attack twice in a single action
 | --- | --- |
 | Lowgold | Strikes |
 | Highgold | Empowered strikes |
-| Truegold | Enforcer strike techniques, like Rippling Sword |
+| Truegold | Enforcer strike techniques |
 
 - Each strike rolls to hit separately.
 - Two madra-powered strikes share one channel cap, so two half-strength strikes cost the same as one full one.

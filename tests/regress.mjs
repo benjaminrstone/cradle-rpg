@@ -110,10 +110,9 @@ function pointsFor(game, f, o, rnd) {
   return out;
 }
 
-// Courses to try: keep, stop, toward, away, and a spot near the opponent.
 function walksFor(game, f, rnd) {
   const opp = game.pos(game.opponent(f));
-  return ['keep', 'stop', 'toward', 'away', `${Math.round((opp.x + (rnd() * 8 - 4)) * 10) / 10}:${Math.round((opp.y + (rnd() * 8 - 4)) * 10) / 10}`];
+  return ['keep', 'stop', 'toward', `hold:${4 + Math.round(rnd() * 14)}`, `${Math.round((opp.x + (rnd() * 8 - 4)) * 10) / 10}:${Math.round((opp.y + (rnd() * 8 - 4)) * 10) / 10}`];
 }
 
 function variants(game, f, o, rnd) {
@@ -153,7 +152,7 @@ function playFight(defs, seed) {
       const [k, a, t] = pool[Math.floor(rnd() * pool.length)];
       // Walk somewhere alongside, some of the time.
       const walks = walksFor(game, f, rnd);
-      const w = k === 'move' ? 'keep' : walks[Math.floor(rnd() * walks.length)];
+      const w = walks[Math.floor(rnd() * walks.length)];
       if (w !== 'keep') step('walkPreview', { k, a, t, w, pv: game.preview(f, k, a, t, w), pj: game.project(f, k, a, t, w) });
       if (rnd() < 0.02) game.setDrawOffer(f.index, !game.drawOffers[f.index]);
       game.act(k, a, t, game.preview(f, k, a, t, w).enabled ? w : 'keep');
